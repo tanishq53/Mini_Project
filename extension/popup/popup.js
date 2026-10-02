@@ -1,2 +1,5 @@
-// Owner: Tanishq. Phase 1: skeleton. Phase 2 builds the real UI against mockData.js.
-console.log("PrivacyGuard panel loaded.");
+import { renderReport, showState } from "./ui.js";
+import { MOCK_REPORT } from "../mockData.js";
+
+renderReport(MOCK_REPORT);
+showState("result");
