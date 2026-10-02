@@ -1,9 +1,259 @@
-body {
-  margin: 0;
-  padding: 16px;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: #1f2933;
-  background: #ffffff;
+/* PrivacyGuard side panel styles. Owner: Tanishq.
+   Design idea: the report is a "privacy label" for a website, like a nutrition label:
+   thick ink rules, thin hairlines, one big number. Colour is reserved for risk. */
+
+/* ---------- 1. Tokens ---------- */
+:root {
+  --ground: #eceff1;
+  --paper: #ffffff;
+  --ink: #11181c;
+  --muted: #55626b;
+  --hair: #d3dade;
+  --focus: #1a5fd0;
+
+  --risk-low: #14764a;
+  --risk-moderate: #8a6500;
+  --risk-high: #c2501c;
+  --risk-very-high: #b3261e;
+  --risk-low-bg: #e3f3ea;
+  --risk-moderate-bg: #faf0cf;
+  --risk-high-bg: #fbe6da;
+  --risk-very-high-bg: #fadcda;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+  --fs-score: 72px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  --rule-thick: 6px;
+  --rule-mid: 2px;
+  --radius: 4px;
 }
-h1 { font-size: 18px; margin: 0 0 8px; }
-p  { font-size: 14px; margin: 0; color: #52606d; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0d1114;
+    --paper: #161c20;
+    --ink: #e8eef1;
+    --muted: #93a1aa;
+    --hair: #2a343a;
+    --focus: #7fb0ff;
+
+    --risk-low: #4cc38a;
+    --risk-moderate: #e3b93c;
+    --risk-high: #f08a52;
+    --risk-very-high: #ff7b72;
+    --risk-low-bg: #12301f;
+    --risk-moderate-bg: #3a2f0f;
+    --risk-high-bg: #3b2418;
+    --risk-very-high-bg: #3d1d1b;
+  }
+}
+
+/* ---------- 2. Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--ground);
+  padding: var(--sp-3);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: var(--fs-md); font-weight: 700; }
+a { color: inherit; text-underline-offset: 2px; }
+ul { margin: 0; padding: 0; list-style: none; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- 3. Risk bands ----------
+   Put data-risk="low|moderate|high|very-high" on any ancestor.
+   Children read --risk and --risk-bg. */
+[data-risk="low"]       { --risk: var(--risk-low);       --risk-bg: var(--risk-low-bg); }
+[data-risk="moderate"]  { --risk: var(--risk-moderate);  --risk-bg: var(--risk-moderate-bg); }
+[data-risk="high"]      { --risk: var(--risk-high);      --risk-bg: var(--risk-high-bg); }
+[data-risk="very-high"] { --risk: var(--risk-very-high); --risk-bg: var(--risk-very-high-bg); }
+
+/* ---------- 4. The label ---------- */
+.label {
+  background: var(--paper);
+  border-top: var(--rule-thick) solid var(--ink);
+  padding: var(--sp-4);
+}
+
+.label-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--rule-mid) solid var(--ink);
+}
+.site { font-size: var(--fs-sm); color: var(--muted); overflow-wrap: anywhere; text-align: right; }
+
+/* Score: the one big thing */
+.score {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: var(--rule-thick) solid var(--ink);
+}
+.score-value {
+  font-size: var(--fs-score);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--risk, var(--ink));
+}
+.score-value small {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: var(--sp-1);
+}
+.score-level {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--risk-bg, var(--hair));
+  color: var(--risk, var(--ink));
+  border-radius: var(--radius);
+}
+
+/* Four-segment meter: low, moderate, high, very high */
+.meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: var(--sp-3); }
+.meter span { height: 6px; background: var(--hair); border-radius: 1px; }
+.meter span.on { background: var(--risk, var(--ink)); }
+
+/* Rows: "name ........ value" */
+.section { padding-top: var(--sp-3); }
+.section + .section { margin-top: var(--sp-3); border-top: var(--rule-mid) solid var(--ink); }
+.section-title { margin-bottom: var(--sp-1); }
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--hair);
+}
+.row:last-child { border-bottom: 0; }
+.row-name { color: var(--ink); }
+.row-value { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.row-value.zero { color: var(--muted); font-weight: 500; }
+.row.indent .row-name { padding-left: var(--sp-4); color: var(--muted); font-size: var(--fs-sm); }
+
+/* Small status tag */
+.tag {
+  display: inline-block;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  padding: 1px var(--sp-2);
+  border-radius: var(--radius);
+  background: var(--hair);
+  color: var(--ink);
+}
+.tag.ok   { background: var(--risk-low-bg);       color: var(--risk-low); }
+.tag.warn { background: var(--risk-moderate-bg);  color: var(--risk-moderate); }
+.tag.bad  { background: var(--risk-very-high-bg); color: var(--risk-very-high); }
+
+/* Link list: possible privacy links when the policy is not found */
+.link-list li { border-bottom: 1px solid var(--hair); }
+.link-list li:last-child { border-bottom: 0; }
+.link-list a { display: block; padding: var(--sp-2) 0; font-size: var(--fs-sm); }
+
+/* Recommendations */
+.reco li { padding: var(--sp-2) 0 var(--sp-2) var(--sp-4); position: relative; border-bottom: 1px solid var(--hair); }
+.reco li:last-child { border-bottom: 0; }
+.reco li::before {
+  content: ""; position: absolute; left: 0; top: 14px;
+  width: 6px; height: 6px; background: var(--ink);
+}
+
+/* ---------- 5. Buttons ---------- */
+.actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.btn {
+  flex: 1;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px var(--sp-4);
+  border: var(--rule-mid) solid var(--ink);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.btn:hover { background: var(--hair); }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--ink); color: var(--paper); }
+.btn-primary:hover { background: var(--ink); opacity: 0.88; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+/* ---------- 6. States ----------
+   <main id="app" data-state="idle|scanning|result|error">
+   Only the matching [data-view] block is shown. */
+[data-view] { display: none; }
+#app[data-state="idle"]     [data-view="idle"],
+#app[data-state="scanning"] [data-view="scanning"],
+#app[data-state="result"]   [data-view="result"],
+#app[data-state="error"]    [data-view="error"] { display: block; }
+
+.empty { text-align: left; }
+.empty h2 { font-size: var(--fs-lg); margin-bottom: var(--sp-2); }
+.empty p { color: var(--muted); margin-bottom: var(--sp-4); }
+
+/* Banner for warnings and errors */
+.banner {
+  padding: var(--sp-3);
+  border-left: 4px solid var(--risk-very-high);
+  background: var(--risk-very-high-bg);
+  color: var(--ink);
+  margin-bottom: var(--sp-3);
+}
+.banner.warn { border-left-color: var(--risk-moderate); background: var(--risk-moderate-bg); }
+.banner strong { display: block; margin-bottom: 2px; }
+
+/* Loading skeleton */
+.skeleton { background: var(--hair); border-radius: var(--radius); height: 14px; margin: var(--sp-3) 0; }
+.skeleton.big { height: 56px; width: 40%; }
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+}
+
+/* The one moment of motion: the score numeral settles in when a result arrives */
+@media (prefers-reduced-motion: no-preference) {
+  #app[data-state="result"] .score-value { animation: settle 360ms ease-out; }
+  @keyframes settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}

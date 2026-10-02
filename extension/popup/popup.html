@@ -7,9 +7,129 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main id="app">
-    <h1>PrivacyGuard</h1>
-    <p>Skeleton loaded. UI coming in Phase 2.</p>
+  <!--
+    Four states. Only the matching [data-view] block is visible (see style.css).
+    TEMPORARY: data-state="result" and the sample values below let you see the layout now.
+    Step 5 (popup.js) will set the state and ui.js (Step 3) will fill every element that has an id.
+  -->
+  <main id="app" data-state="result">
+
+    <!-- 1. IDLE: before the first scan -->
+    <section class="label empty" data-view="idle">
+      <h2>Check this site's privacy</h2>
+      <p>PrivacyGuard looks at the forms, cookies, trackers and privacy policy on the page you are viewing. It only reads the page. It never clicks, submits or stores what you type.</p>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-scan" type="button">Scan this page</button>
+      </div>
+    </section>
+
+    <!-- 2. SCANNING: loading skeleton -->
+    <section class="label" data-view="scanning" aria-live="polite" aria-busy="true">
+      <h2>Scanning <span id="scanning-site">this page</span></h2>
+      <p class="muted">Reading forms, cookies, trackers and policy links.</p>
+      <div class="skeleton big"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </section>
+
+    <!-- 3. RESULT: the privacy label. Set data-risk to low | moderate | high | very-high -->
+    <section class="label" data-view="result" data-risk="high">
+      <div class="label-head">
+        <h1>PrivacyGuard</h1>
+        <span class="site" id="site">example.com</span>
+      </div>
+
+      <div class="score">
+        <span class="score-value" id="score-value">67<small>/100</small></span>
+        <span class="score-level" id="score-level">High risk</span>
+      </div>
+      <div class="meter" id="meter" aria-hidden="true">
+        <span class="on"></span><span class="on"></span><span class="on"></span><span></span>
+      </div>
+
+      <div id="warnings"></div>
+
+      <div class="section">
+        <h2 class="section-title">Personal data</h2>
+        <div class="row"><span class="row-name">Forms on page</span><span class="row-value" id="v-forms">3</span></div>
+        <div class="row"><span class="row-name">Personal data fields</span><span class="row-value" id="v-fields">7</span></div>
+        <div id="fieldtypes">
+          <div class="row indent"><span class="row-name">Email</span><span class="row-value">2</span></div>
+          <div class="row indent"><span class="row-name">Name</span><span class="row-value">1</span></div>
+          <div class="row indent"><span class="row-name">Phone</span><span class="row-value">1</span></div>
+          <div class="row indent"><span class="row-name">Address</span><span class="row-value">1</span></div>
+          <div class="row indent"><span class="row-name">Password</span><span class="row-value">1</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Trackers</h2>
+        <div class="row"><span class="row-name">Analytics</span><span class="row-value" id="v-analytics">3</span></div>
+        <div class="row"><span class="row-name">Advertising</span><span class="row-value" id="v-advertising">2</span></div>
+        <div class="row"><span class="row-name">Social media</span><span class="row-value" id="v-social">1</span></div>
+        <div class="row"><span class="row-name">Unrecognised third party</span><span class="row-value" id="v-unknown">1</span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Cookies</h2>
+        <div class="row"><span class="row-name">Total</span><span class="row-value" id="v-cookies">14</span></div>
+        <div class="row"><span class="row-name">First-party</span><span class="row-value" id="v-cookies-first">9</span></div>
+        <div class="row"><span class="row-name">Third-party</span><span class="row-value" id="v-cookies-third">5</span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Connection</h2>
+        <div class="row"><span class="row-name">HTTPS</span><span class="row-value"><span class="tag ok" id="v-https">Secure</span></span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Privacy policy</h2>
+        <div class="row"><span class="row-name">Status</span><span class="row-value"><span class="tag ok" id="v-policy">Found</span></span></div>
+        <ul class="link-list" id="policy-links">
+          <li><a href="https://example.com/privacy" target="_blank" rel="noopener noreferrer">example.com/privacy</a></li>
+        </ul>
+      </div>
+
+      <!-- Filled after the user clicks Analyze policy. Hidden until then. -->
+      <div class="section" id="policy-analysis" hidden>
+        <h2 class="section-title">Policy summary</h2>
+        <div id="policy-analysis-body"></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Where the score comes from</h2>
+        <div class="row"><span class="row-name">Personal data</span><span class="row-value" id="b-personal">25</span></div>
+        <div class="row"><span class="row-name">Trackers</span><span class="row-value" id="b-trackers">15</span></div>
+        <div class="row"><span class="row-name">Security</span><span class="row-value" id="b-security">10</span></div>
+        <div class="row"><span class="row-name">Policy</span><span class="row-value" id="b-policy">8</span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">What you can do</h2>
+        <ul class="reco" id="reco">
+          <li>Review third-party tracking before signing up.</li>
+          <li>Check the privacy policy for data deletion information.</li>
+        </ul>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-analyze" type="button">Analyze policy</button>
+        <button class="btn" id="btn-rescan" type="button">Rescan</button>
+      </div>
+    </section>
+
+    <!-- 4. ERROR -->
+    <section class="label" data-view="error" aria-live="assertive">
+      <div class="banner">
+        <strong id="error-title">Can't scan this page</strong>
+        <span id="error-message">Chrome does not let extensions run on this page. Open a normal website and try again.</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-retry" type="button">Try again</button>
+      </div>
+    </section>
+
   </main>
   <script type="module" src="popup.js"></script>
 </body>
