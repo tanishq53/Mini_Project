@@ -1,23 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PrivacyGuard</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <!--
     Four states. Only the matching [data-view] block is visible (see style.css).
-    TEMPORARY: data-state="result" and the sample values below let you see the layout now.
+    The sample values below are placeholders. ui.js overwrites them, and popup.js sets the state.
     Step 5 (popup.js) will set the state and ui.js (Step 3) will fill every element that has an id.
   -->
-  <main id="app" data-state="result">
+  <main id="app" data-state="idle">
 
     <!-- 1. IDLE: before the first scan -->
     <section class="label empty" data-view="idle">
       <h2>Check this site's privacy</h2>
-      <p>PrivacyGuard looks at the forms, cookies, trackers and privacy policy on the page you are viewing. It only reads the page. It never clicks, submits or stores what you type.</p>
+      <p>PrivacyGuard looks at the forms, cookies, trackers and privacy policy on the page you are viewing. It only
+        reads the page. It never clicks, submits or stores what you type.</p>
       <div class="actions">
         <button class="btn btn-primary" id="btn-scan" type="button">Scan this page</button>
       </div>
@@ -53,7 +56,8 @@
       <div class="section">
         <h2 class="section-title">Personal data</h2>
         <div class="row"><span class="row-name">Forms on page</span><span class="row-value" id="v-forms">3</span></div>
-        <div class="row"><span class="row-name">Personal data fields</span><span class="row-value" id="v-fields">7</span></div>
+        <div class="row"><span class="row-name">Personal data fields</span><span class="row-value"
+            id="v-fields">7</span></div>
         <div id="fieldtypes">
           <div class="row indent"><span class="row-name">Email</span><span class="row-value">2</span></div>
           <div class="row indent"><span class="row-name">Name</span><span class="row-value">1</span></div>
@@ -66,28 +70,35 @@
       <div class="section">
         <h2 class="section-title">Trackers</h2>
         <div class="row"><span class="row-name">Analytics</span><span class="row-value" id="v-analytics">3</span></div>
-        <div class="row"><span class="row-name">Advertising</span><span class="row-value" id="v-advertising">2</span></div>
+        <div class="row"><span class="row-name">Advertising</span><span class="row-value" id="v-advertising">2</span>
+        </div>
         <div class="row"><span class="row-name">Social media</span><span class="row-value" id="v-social">1</span></div>
-        <div class="row"><span class="row-name">Unrecognised third party</span><span class="row-value" id="v-unknown">1</span></div>
+        <div class="row"><span class="row-name">Unrecognised third party</span><span class="row-value"
+            id="v-unknown">1</span></div>
       </div>
 
       <div class="section">
         <h2 class="section-title">Cookies</h2>
         <div class="row"><span class="row-name">Total</span><span class="row-value" id="v-cookies">14</span></div>
-        <div class="row"><span class="row-name">First-party</span><span class="row-value" id="v-cookies-first">9</span></div>
-        <div class="row"><span class="row-name">Third-party</span><span class="row-value" id="v-cookies-third">5</span></div>
+        <div class="row"><span class="row-name">First-party</span><span class="row-value" id="v-cookies-first">9</span>
+        </div>
+        <div class="row"><span class="row-name">Third-party</span><span class="row-value" id="v-cookies-third">5</span>
+        </div>
       </div>
 
       <div class="section">
         <h2 class="section-title">Connection</h2>
-        <div class="row"><span class="row-name">HTTPS</span><span class="row-value"><span class="tag ok" id="v-https">Secure</span></span></div>
+        <div class="row"><span class="row-name">HTTPS</span><span class="row-value"><span class="tag ok"
+              id="v-https">Secure</span></span></div>
       </div>
 
       <div class="section">
         <h2 class="section-title">Privacy policy</h2>
-        <div class="row"><span class="row-name">Status</span><span class="row-value"><span class="tag ok" id="v-policy">Found</span></span></div>
+        <div class="row"><span class="row-name">Status</span><span class="row-value"><span class="tag ok"
+              id="v-policy">Found</span></span></div>
         <ul class="link-list" id="policy-links">
-          <li><a href="https://example.com/privacy" target="_blank" rel="noopener noreferrer">example.com/privacy</a></li>
+          <li><a href="https://example.com/privacy" target="_blank" rel="noopener noreferrer">example.com/privacy</a>
+          </li>
         </ul>
       </div>
 
@@ -99,7 +110,8 @@
 
       <div class="section">
         <h2 class="section-title">Where the score comes from</h2>
-        <div class="row"><span class="row-name">Personal data</span><span class="row-value" id="b-personal">25</span></div>
+        <div class="row"><span class="row-name">Personal data</span><span class="row-value" id="b-personal">25</span>
+        </div>
         <div class="row"><span class="row-name">Trackers</span><span class="row-value" id="b-trackers">15</span></div>
         <div class="row"><span class="row-name">Security</span><span class="row-value" id="b-security">10</span></div>
         <div class="row"><span class="row-name">Policy</span><span class="row-value" id="b-policy">8</span></div>
@@ -123,7 +135,8 @@
     <section class="label" data-view="error" aria-live="assertive">
       <div class="banner">
         <strong id="error-title">Can't scan this page</strong>
-        <span id="error-message">Chrome does not let extensions run on this page. Open a normal website and try again.</span>
+        <span id="error-message">Chrome does not let extensions run on this page. Open a normal website and try
+          again.</span>
       </div>
       <div class="actions">
         <button class="btn btn-primary" id="btn-retry" type="button">Try again</button>
@@ -133,4 +146,5 @@
   </main>
   <script type="module" src="popup.js"></script>
 </body>
+
 </html>
