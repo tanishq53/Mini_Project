@@ -1,10 +1,28 @@
 # PrivacyGuard Data Contract
 
-**Version:** 1.0
+**Version:** 1.2
 **Maintainer:** Tanishq Gautam (integration)
 **Status:** Frozen for development. Changes need team agreement (see section 9).
 
 This document defines the JSON shapes and messages that connect every PrivacyGuard module. If your module follows this contract, it will plug into the rest of the system without changes.
+
+## Phase scope
+
+PrivacyGuard is built in two phases.
+
+**Phase 1 (current):** scan the page for forms, cookies, trackers and HTTPS, and calculate the Privacy Risk Score. The scoring model is in `docs/scoring.md`. No Gemini, no policy analysis.
+
+**Phase 2 (later):** find the privacy policy and analyze it with Gemini (`/analyze-policy`, the Analyze policy button, a policy part in the score).
+
+Everything for Phase 2 stays in this contract so the shapes do not change later, but in Phase 1 it is unused:
+
+| Item | Phase 1 behaviour |
+|---|---|
+| `policy` object (4.2, 5) | Content scripts may return the zero-filled shape `{ found: false, url: null, candidates: [] }`. The engine and the panel ignore it. |
+| `POST /analyze-policy` (6.2) | Not implemented |
+| `ANALYZE_POLICY` message (3) | Not sent |
+| `policyAnalysis` in the report (7) | Always `null` |
+| `breakdown.policy` (6.1) | Not present. Phase 1 breakdown has three keys. |
 
 ## 1. Who owns what
 
@@ -36,16 +54,25 @@ Popup  ->  background.js  ->  content scripts (scanner, tracker, policy)
 
 All messages use `chrome.runtime.sendMessage` or `chrome.tabs.sendMessage`. Every message has a `type` string and an optional `payload`.
 
-| Type | From | To | Payload |
-|---|---|---|---|
-| `START_SCAN` | popup | background | `{ tabId }` |
-| `RUN_SCAN` | background | content scripts | `{}` |
-| `SCAN_RESULT` | content script | background | `{ source, data }` (see section 4) |
-| `ANALYZE_POLICY` | popup | background | `{ tabId, policyUrl }` |
-| `REPORT_READY` | background | popup | Report object (section 6) |
-| `SCAN_ERROR` | any | popup | Error object (section 8) |
+| Type | From | To | Payload | Reply |
+|---|---|---|---|---|
+| `START_SCAN` | popup | background | `{ tabId }` | The report (section 7), or an error object |
+| `RUN_SCAN` | background | content scripts | `{}` | None. Content scripts answer with `SCAN_RESULT`. |
+| `SCAN_RESULT` | content script | background | `{ source, data }` (see section 4) | None |
+| `ANALYZE_POLICY` | popup | background | `{ tabId, policyUrl }` | The policy analysis (section 6.2), or an error object |
+| `PAGE_CHANGED` | content script | background | `{ url, reason }` | None |
+| `SCAN_STARTED` | background | popup | `{ tabId, url }` | None |
+| `REPORT_READY` | background | popup | `{ tabId, report }` | None |
+| `SCAN_ERROR` | background | popup | `{ tabId, error }` | None |
+| `PING` | any | background | `{}` | `{ ok: true }` |
 
 `source` in `SCAN_RESULT` is either `"scanner"` or `"tracker"`, so background knows which part it received.
+
+`reason` in `PAGE_CHANGED` is `"url"` (address changed without a reload) or `"content"` (new content appeared). Background decides whether to rescan.
+
+`START_SCAN` and `ANALYZE_POLICY` are answered directly with their result. `SCAN_STARTED`, `REPORT_READY` and `SCAN_ERROR` are pushed to the popup only for automatic rescans the popup did not ask for. The popup ignores pushes whose `tabId` is not the active tab.
+
+Content script authors (Varsha, Namitha) only need `RUN_SCAN` (listen) and `SCAN_RESULT` (send). The rest is handled by Tanishq.
 
 ## 4. Content script output
 
@@ -159,17 +186,16 @@ Response:
 {
   "id": "scan_abc123",
   "url": "https://example.com/login",
-  "riskScore": 67,
-  "riskLevel": "High",
+  "riskScore": 39,
+  "riskLevel": "Moderate",
   "breakdown": {
-    "personalData": 25,
-    "trackers": 15,
-    "security": 10,
-    "policy": 8
+    "personalData": 14,
+    "trackers": 25,
+    "security": 0
   },
   "recommendations": [
-    "Review third-party tracking before signing up.",
-    "Check the privacy policy for data deletion information."
+    "2 advertising tracker(s) found. Consider a tracker blocker or declining non-essential cookies.",
+    "5 third-party cookies are set. Consider blocking third-party cookies in your browser."
   ]
 }
 ```
@@ -178,8 +204,10 @@ Response:
 |---|---|---|
 | `riskScore` | integer | 0 to 100 |
 | `riskLevel` | string | One of `"Low"`, `"Moderate"`, `"High"`, `"Very High"` |
-| `breakdown` | object | Component scores. Should sum to `riskScore`. |
-| `recommendations` | array of strings | Plain language, rule-based. Must work without Gemini. |
+| `breakdown` | object | Phase 1 keys: `personalData`, `trackers` (includes cookies), `security`. Must sum exactly to `riskScore`. A `policy` key is added in Phase 2. |
+| `recommendations` | array of strings | Plain language, rule-based, at most 5, most serious first. Must work without Gemini. |
+
+The score is calculated by the formula in `docs/scoring.md`. Reference implementation: `backend/services/risk_engine.py`.
 
 Risk levels (proposed project thresholds, not an official standard):
 
@@ -190,7 +218,7 @@ Risk levels (proposed project thresholds, not an official standard):
 | 51 to 75 | High | Orange |
 | 76 to 100 | Very High | Red |
 
-### 6.2 `POST /analyze-policy`
+### 6.2 `POST /analyze-policy` (Phase 2, not implemented in Phase 1)
 
 Triggered only when the user clicks Analyze Policy.
 
@@ -227,7 +255,7 @@ Returns the stored scan result and policy analysis (if one exists) for the given
 
 ## 7. Final report object (backend to popup)
 
-`REPORT_READY` carries this object, assembled by background:
+This object is the reply to `START_SCAN` and the payload of `REPORT_READY`. It is assembled by background:
 
 ```json
 {
@@ -240,7 +268,7 @@ Returns the stored scan result and policy analysis (if one exists) for the given
 
 - `scan` is the merged scan object (section 5).
 - `result` is the `/scan` response (section 6.1).
-- `policyAnalysis` is `null` until the user runs Analyze Policy, then the `/analyze-policy` response.
+- `policyAnalysis` is always `null` in Phase 1. In Phase 2 it stays `null` until the user runs Analyze Policy, then holds the `/analyze-policy` response.
 - `warnings` is an array of strings, such as "Tracker module did not respond".
 
 ## 8. Error format
@@ -287,3 +315,5 @@ Backend errors should use HTTP status codes (400 for invalid input, 500 for serv
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-02 | Initial contract |
+| 1.1 | 2026-10-03 | Messages: added reply column, `PAGE_CHANGED`, `SCAN_STARTED`, `PING`. `START_SCAN` and `ANALYZE_POLICY` are answered directly; `REPORT_READY` and `SCAN_ERROR` are only pushed for automatic rescans. No change to any module's output. |
+| 1.2 | 2026-10-03 | Added Phase scope section. Phase 1 has no policy analysis. `breakdown` has three keys (`personalData`, `trackers`, `security`) and sums exactly to `riskScore`. `/analyze-policy` marked Phase 2. Scoring model referenced in `docs/scoring.md`. Content-script output formats unchanged. |
