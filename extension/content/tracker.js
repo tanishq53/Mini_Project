@@ -9,6 +9,16 @@
       "mixpanel.com",
       "amplitude.com"
     ],
+
+    // Check social before advertising because facebook.net
+    // also matches connect.facebook.net.
+    social: [
+      "connect.facebook.net",
+      "platform.twitter.com",
+      "platform.linkedin.com",
+      "platform.instagram.com"
+    ],
+
     advertising: [
       "doubleclick.net",
       "googlesyndication.com",
@@ -16,12 +26,6 @@
       "facebook.net",
       "adsrvr.org",
       "adnxs.com"
-    ],
-    social: [
-      "connect.facebook.net",
-      "platform.twitter.com",
-      "platform.linkedin.com",
-      "platform.instagram.com"
     ]
   };
 
