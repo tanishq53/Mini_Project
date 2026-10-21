@@ -18,10 +18,10 @@ export function applyPhaseSwitch() {
 
 const RISK_KEYS = ["low", "moderate", "high", "very-high"];
 const RISK_LABEL = {
-    "low": "Low risk",
-    "moderate": "Moderate risk",
-    "high": "High risk",
-    "very-high": "Very high risk"
+    "low": "Low exposure",
+    "moderate": "Moderate exposure",
+    "high": "High exposure",
+    "very-high": "Very high exposure"
 };
 
 // "Very High" -> "very-high". Falls back to score bands if the level is missing or unknown.
