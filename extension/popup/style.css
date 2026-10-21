@@ -488,3 +488,9 @@ ul {
   text-align: left;
   font-weight: 500;
 }
+/* One-line explanation under the score: the number is exposure, not a trust verdict. */
+.score-note {
+  font-size: 12px;
+  margin: 0;
+  padding: var(--sp-2) 0 var(--sp-3);
+}

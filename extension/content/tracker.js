@@ -87,13 +87,17 @@
   function emptyResult() {
     return {
       tracking: {
-        thirdPartyScripts: 0,
-        trackers: { analytics: 0, advertising: 0, social: 0, unknown: 0 },
-        trackerList: []
+        thirdPartyScripts: trackerList.length,
+        trackers,
+        trackerList
       },
       policy: window.__pgDetectPolicy
         ? window.__pgDetectPolicy()
-        : { found: false, url: null, candidates: [] }
+        : {
+            found: false,
+            url: null,
+            candidates: []
+          }
     };
   }
 
