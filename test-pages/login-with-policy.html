@@ -1,3 +1,23 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Test page: login-with-policy</title></head>
-<body><h1>Test page: login-with-policy</h1><p>Placeholder. Tanishq builds this page in Phase 3.</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test page: login-with-policy</title>
+</head>
+<body>
+  <h1>Sign up (test page)</h1>
+  <p>Expected scan: 1 form, 5 fields (name 1, email 1, phone 1, address 1, password 1).</p>
+
+  <form action="#" onsubmit="return false">
+    <label>Full name <input type="text" name="full_name" placeholder="Your name"></label><br>
+    <label>Email <input type="email" name="user_email"></label><br>
+    <label>Mobile <input type="tel" name="phone_number"></label><br>
+    <label>Address <input type="text" name="street_address" autocomplete="street-address"></label><br>
+    <label>Password <input type="password" name="password"></label><br>
+    <input type="checkbox" name="remember"> Remember me<br>
+    <button type="submit">Create account</button>
+  </form>
+
+  <footer><a href="/privacy.html">Privacy Policy</a></footer>
+</body>
+</html>
