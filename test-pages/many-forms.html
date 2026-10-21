@@ -1,3 +1,32 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Test page: many-forms</title></head>
-<body><h1>Test page: many-forms</h1><p>Placeholder. Tanishq builds this page in Phase 3.</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test page: many-forms</title>
+</head>
+<body>
+  <h1>Many forms (test page)</h1>
+  <p>Expected scan: 3 forms, 9 fields (email 2, name 1, phone 1, dob 1, password 1, financial 2, governmentId 1).</p>
+
+  <form onsubmit="return false">
+    <input type="email" name="newsletter_email" placeholder="Email">
+    <button>Subscribe</button>
+  </form>
+
+  <form onsubmit="return false">
+    <input type="text" name="first_name" placeholder="Name">
+    <input type="email" name="contact_email" placeholder="Email">
+    <input type="tel" name="mobile" placeholder="Phone">
+    <input type="date" name="dob" placeholder="Date of birth">
+    <input type="password" name="password">
+    <button>Register</button>
+  </form>
+
+  <form onsubmit="return false">
+    <input type="text" name="card_number" placeholder="Card number" autocomplete="cc-number">
+    <input type="text" name="cvv" placeholder="CVV">
+    <input type="text" name="aadhaar" placeholder="Aadhaar number">
+    <button>Pay</button>
+  </form>
+</body>
+</html>

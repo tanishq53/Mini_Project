@@ -123,7 +123,8 @@ async function countCookies(hostname, trackerList) {
   try {
     const first = new Set((await chrome.cookies.getAll({ domain: site })).map(key));
     const third = new Set();
-    const domains = new Set(trackerList.map((t) => t.domain).filter((d) => siteOf(d) !== site));
+    // Cookies are usually set on the parent domain (doubleclick.net), not the script's subdomain, so look up the site.
+    const domains = new Set(trackerList.map((t) => siteOf(t.domain)).filter((s) => s !== site));
     for (const d of domains) {
       for (const c of await chrome.cookies.getAll({ domain: d })) third.add(key(c));
     }

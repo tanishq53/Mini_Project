@@ -1,3 +1,20 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Test page: many-trackers</title></head>
-<body><h1>Test page: many-trackers</h1><p>Placeholder. Tanishq builds this page in Phase 3.</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test page: many-trackers</title>
+</head>
+<body>
+  <h1>Many trackers (test page)</h1>
+  <p>Expected scan: 7 third-party scripts. Analytics 3, advertising 2, social 1, unknown 1. No forms.</p>
+  <p>The script addresses point at real tracker domains but at paths that do not exist (404), so no real tracking runs.</p>
+
+  <script src="https://www.google-analytics.com/pg-test.js" async></script>
+  <script src="https://www.googletagmanager.com/pg-test.js" async></script>
+  <script src="https://static.hotjar.com/pg-test.js" async></script>
+  <script src="https://securepubads.g.doubleclick.net/pg-test.js" async></script>
+  <script src="https://pagead2.googlesyndication.com/pg-test.js" async></script>
+  <script src="https://connect.facebook.net/pg-test.js" async></script>
+  <script src="https://cdn.some-unknown-site.example/pg-test.js" async></script>
+</body>
+</html>
