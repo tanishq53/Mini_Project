@@ -12,9 +12,12 @@
     "sidePanel",
     "webNavigation"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
-    "service_worker": "background/background.js"
+    "service_worker": "background/background.js",
+    "type": "module"
   },
   "action": {
     "default_title": "PrivacyGuard",
@@ -29,7 +32,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
       "js": [
         "content/policyDetector.js",
         "content/scanner.js",

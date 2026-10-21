@@ -2,7 +2,17 @@
 // Pure display code: takes data in the shape of docs/contract.md and fills the elements in popup.html.
 // It never calls the backend and never uses innerHTML, so page-supplied text cannot inject markup.
 
+import { PHASE2_POLICY } from "../utils/config.js";
+
 const $ = (id) => document.getElementById(id);
+
+// Hides everything marked data-phase2 while the switch in config.js is false.
+// Inline display is used (not the hidden attribute) because .row uses display:flex, which beats [hidden].
+export function applyPhaseSwitch() {
+    for (const node of document.querySelectorAll("[data-phase2]")) {
+        node.style.display = PHASE2_POLICY ? "" : "none";
+    }
+}
 
 /* ---------- helpers ---------- */
 

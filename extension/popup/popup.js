@@ -5,7 +5,7 @@
 import { USE_MOCK } from "../utils/config.js";
 import {
     showState, setScanningSite, renderReport, renderPolicyAnalysis,
-    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy
+    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy, applyPhaseSwitch
 } from "./ui.js";
 import { source } from "./source.js";
 import { mountDevPicker } from "./devPicker.js";
@@ -15,6 +15,8 @@ const $ = (id) => document.getElementById(id);
 let report = null;   // the report currently on screen
 let tab = null;      // the tab being scanned
 let busy = false;    // true while a scan or analysis is running
+let rescanQueued = false; // the page changed while a scan was running
+let timer = null;    // debounce for automatic scans
 
 /* ---------- helpers ---------- */
 
@@ -42,8 +44,15 @@ const smooth = () => (window.matchMedia?.("(prefers-reduced-motion: reduce)").ma
 
 /* ---------- actions ---------- */
 
+// Real mode: background.js runs the scan and calls the backend (contract: START_SCAN).
+async function scanReal(tabId) {
+    const reply = await chrome.runtime.sendMessage({ type: "START_SCAN", payload: { tabId } });
+    if (!reply || reply.error) throw reply ?? { error: true, code: "SCAN_TIMEOUT" };
+    return reply;
+}
+
 async function startScan() {
-    if (busy) return;
+    if (busy) { rescanQueued = true; return; }
     busy = true;
     try {
         tab = await getActiveTab();
@@ -54,7 +63,7 @@ async function startScan() {
             throw { error: true, code: "RESTRICTED_PAGE" };
         }
 
-        report = await source.scan(tab?.id);
+        report = USE_MOCK ? await source.scan(tab?.id) : await scanReal(tab?.id);
         renderReport(report);
         showState("result");
         window.scrollTo(0, 0);
@@ -63,6 +72,8 @@ async function startScan() {
         renderError(toError(err));
     } finally {
         busy = false;
+        // The user moved on while we were scanning: scan the new page instead of showing stale data.
+        if (rescanQueued) { rescanQueued = false; startScan(); }
     }
 }
 
@@ -95,21 +106,21 @@ $("btn-rescan").addEventListener("click", startScan);
 $("btn-retry").addEventListener("click", startScan);
 $("btn-analyze").addEventListener("click", analyzePolicy);
 
+applyPhaseSwitch();
 if (USE_MOCK) mountDevPicker();
 
-// The panel stays open when the user changes tab or the page finishes loading.
-// Showing the old site's results would be misleading, so go back to the start screen.
-// (Step 10 replaces this with automatic rescans.)
+// Automatic scanning: when the panel opens, when the user switches tab, and when a page finishes loading.
+// The short delay merges bursts of events (a page load often fires several) into one scan.
 if (!USE_MOCK) {
-    const reset = () => {
-        if (busy) return;
-        report = null;
-        showState("idle");
+    const scheduleScan = () => {
+        clearTimeout(timer);
+        timer = setTimeout(startScan, 400);
     };
-    chrome.tabs.onActivated.addListener(reset);
-    chrome.tabs.onUpdated.addListener((tabId, info, changed) => {
-        if (info.status === "complete" && changed.active) reset();
+    chrome.tabs.onActivated.addListener(scheduleScan);
+    chrome.tabs.onUpdated.addListener((tabId, info, changedTab) => {
+        if (info.status === "complete" && changedTab.active) scheduleScan();
     });
+    startScan();
+} else {
+    showState("idle");
 }
-
-showState("idle");
