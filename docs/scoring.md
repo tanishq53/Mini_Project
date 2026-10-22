@@ -31,6 +31,7 @@ any of these is true:
 Otherwise (a clean HTTPS page) the points count at half, rounded up, so one detected field still adds 1.
 Unknown third-party scripts do not remove the discount, because not every third-party script is a tracker
 (fonts and CDNs are not). A missing `https` value is treated as secure.
+Apply the discount to the weighted field points first, then cap the personal-data component at 25.
 
 Why: asking for an email address on a secure page with nobody else watching is ordinary. The same field on
 an insecure page, or on a page full of trackers, is not.

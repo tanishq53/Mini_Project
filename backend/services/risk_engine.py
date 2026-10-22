@@ -83,6 +83,14 @@ def _parts(scan: dict) -> dict:
 
     # Only an explicit False counts as insecure, so a missing value never adds a penalty.
     insecure = scan.get("https") is False
+    known_tracker_present = any(_count(trackers.get(k)) > 0 for k in ("analytics", "advertising", "social"))
+    data_exposed_to_others = insecure or known_tracker_present or third_party_cookies > 0
+    # A clean HTTPS page with no known trackers or third-party cookies gets half personal-data points.
+    # Round up so even one low-weight field contributes at least one point.
+    personal_points = min(
+        CAP_PERSONAL_DATA,
+        personal_raw if data_exposed_to_others else (personal_raw + 1) // 2,
+    )
     sensitive_present = any(_count(field_types.get(k)) > 0 for k in SENSITIVE_FIELDS)
     security_items = []
     if insecure:
@@ -93,7 +101,7 @@ def _parts(scan: dict) -> dict:
 
     return {
         "personal_items": personal_items, "personal_raw": personal_raw,
-        "personal": min(personal_raw, CAP_PERSONAL_DATA),
+        "personal": personal_points,
         "tracker_items": tracker_items, "trackers_raw": trackers_raw,
         "trackers": min(trackers_raw, CAP_TRACKERS),
         "third_party_cookies": third_party_cookies, "cookies_raw": cookies_raw,
