@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PrivacyGuard",
   "version": "0.1.0",
-  "description": "Analyze website privacy risks: forms, cookies, trackers and privacy policies.",
+  "description": "Estimate website privacy exposure from forms, cookies, trackers and HTTPS.",
   "permissions": [
     "activeTab",
     "scripting",

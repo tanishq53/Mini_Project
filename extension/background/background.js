@@ -2,6 +2,7 @@
 // START_SCAN -> ask the page's content scripts -> add cookies -> POST /scan -> report.
 import { postScan } from "../utils/api.js";
 import { SCAN_TIMEOUT_MS } from "../utils/config.js";
+import { removeReport, saveReport } from "../utils/storage.js";
 
 const ZERO_SCANNER = {
   forms: 0, personalDataFields: 0,
@@ -18,6 +19,15 @@ const ZERO_POLICY = { found: false, url: null, candidates: [] };
 // tabId -> { scanner, tracker, resolve }. Content scripts answer with SCAN_RESULT,
 // and sender.tab.id tells us which scan the answer belongs to.
 const pending = new Map();
+const scheduledScans = new Map();
+
+function scheduleScan(tabId) {
+  clearTimeout(scheduledScans.get(tabId));
+  scheduledScans.set(tabId, setTimeout(() => {
+    scheduledScans.delete(tabId);
+    runScan(tabId);
+  }, 300));
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
@@ -25,11 +35,21 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((err) => console.error("PrivacyGuard: side panel setup failed", err));
 });
 
+// Observe SPA history changes outside the content-script isolated world.
+chrome.webNavigation.onHistoryStateUpdated.addListener(({ tabId, frameId }) => {
+  if (frameId === 0) scheduleScan(tabId);
+});
+chrome.webNavigation.onReferenceFragmentUpdated.addListener(({ tabId, frameId }) => {
+  if (frameId === 0) scheduleScan(tabId);
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PING") {
     sendResponse({ ok: true });
   } else if (message.type === "SCAN_RESULT" && sender.tab) {
     collect(sender.tab.id, message.payload);
+  } else if (message.type === "PAGE_CHANGED" && sender.tab?.id != null) {
+    if (message.payload?.reason === "content") scheduleScan(sender.tab.id);
   } else if (message.type === "START_SCAN") {
     runScan(message.payload && message.payload.tabId).then(sendResponse);
     return true; // keep the channel open for the async reply
@@ -79,6 +99,7 @@ async function runScan(tabId) {
   try {
     const result = await postScan(scan);
     const report = { scan, result, policyAnalysis: null, warnings };
+    await saveReport(tabId, report);
     notify({ type: "REPORT_READY", payload: { tabId, report } });
     return report;
   } catch (error) {
@@ -145,3 +166,9 @@ function fail(code, message, tabId) {
 function notify(message) {
   chrome.runtime.sendMessage(message).catch(() => {});
 }
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clearTimeout(scheduledScans.get(tabId));
+  scheduledScans.delete(tabId);
+  removeReport(tabId).catch((err) => console.warn("PrivacyGuard: could not clear tab report", err));
+});

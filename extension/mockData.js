@@ -1,15 +1,7 @@
-// Fake data in the exact shape of docs/contract.md. Owner: Tanishq.
-// Use it to build and test the UI without the backend or the other modules.
-//
-// Every scenario is built with helpers that keep the numbers consistent:
-//   personalDataFields = sum of fieldTypes
-//   cookies.total      = firstParty + thirdParty
-//   riskScore          = sum of breakdown
-//   riskLevel          = band of riskScore (0-25 Low, 26-50 Moderate, 51-75 High, 76-100 Very High)
-// assertConsistent() checks these rules for any report, mock or real.
-
+﻿// Phase 1 mock reports matching backend/services/risk_engine.py. Owner: Tanishq.
 const FIELD_KEYS = ["name", "email", "phone", "address", "dob", "password", "financial", "governmentId"];
-const sum = (obj) => Object.values(obj).reduce((a, b) => a + b, 0);
+const zeroFields = () => Object.fromEntries(FIELD_KEYS.map((key) => [key, 0]));
+const trackerCounts = (overrides = {}) => ({ analytics: 0, advertising: 0, social: 0, unknown: 0, ...overrides });
 
 export function levelFromScore(score) {
   if (score <= 25) return "Low";
@@ -18,236 +10,62 @@ export function levelFromScore(score) {
   return "Very High";
 }
 
-/* ---------- builders ---------- */
-
-function makePolicy(hostname, path = "/privacy") {
-  const href = `https://${hostname}${path}`;
-  return { found: true, url: href, candidates: [{ text: "Privacy Policy", href }] };
-}
-
-function makeScan({
-  hostname, path = "/", https = true, forms = 0, fields = {},
-  cookiesFirst = 0, cookiesThird = 0, scripts = 0, trackers = {}, policy
-}) {
-  const fieldTypes = Object.fromEntries(FIELD_KEYS.map((k) => [k, fields[k] ?? 0]));
-  return {
+function makeReport({ hostname, path = "/", https = true, forms = 0, fields = {}, first = 0, third = 0, trackers = {}, scripts = 0, breakdown, recommendations, warnings = [] }) {
+  const fieldTypes = { ...zeroFields(), ...fields };
+  const score = breakdown.personalData + breakdown.trackers + breakdown.security;
+  const scan = {
     url: `${https ? "https" : "http"}://${hostname}${path}`,
     hostname,
-    scannedAt: "2026-10-02T10:00:00Z",
+    scannedAt: "2026-10-21T10:00:00Z",
     https,
-    scanner: { forms, personalDataFields: sum(fieldTypes), fieldTypes, fields: [] },
-    tracking: {
-      cookies: { total: cookiesFirst + cookiesThird, firstParty: cookiesFirst, thirdParty: cookiesThird },
-      thirdPartyScripts: scripts,
-      trackers: { analytics: 0, advertising: 0, social: 0, unknown: 0, ...trackers }
-    },
-    policy: policy ?? { found: false, url: null, candidates: [] }
+    scanner: { forms, personalDataFields: Object.values(fieldTypes).reduce((a, b) => a + b, 0), fieldTypes, fields: [] },
+    tracking: { cookies: { total: first + third, firstParty: first, thirdParty: third }, thirdPartyScripts: scripts, trackers: trackerCounts(trackers) },
+    policy: { found: false, url: null, candidates: [] }
   };
-}
-
-function makeReport(scan, breakdown, recommendations, extra = {}) {
-  const riskScore = sum(breakdown);
   return {
     scan,
-    result: {
-      id: "scan_mock_" + scan.hostname.replace(/\W/g, "_"),
-      url: scan.url,
-      riskScore,
-      riskLevel: levelFromScore(riskScore),
-      breakdown,
-      recommendations
-    },
-    policyAnalysis: extra.policyAnalysis ?? null,
-    warnings: extra.warnings ?? []
+    result: { id: `scan_mock_${hostname}`, url: scan.url, riskScore: score, riskLevel: levelFromScore(score), breakdown, recommendations },
+    policyAnalysis: null,
+    warnings
   };
 }
 
-/* ---------- policy analysis samples (docs/contract.md 6.2) ---------- */
-
-export const MOCK_POLICY_ANALYSIS = {
-  dataCollected: ["Email", "Phone number", "Device information"],
-  purposes: ["Account creation", "Analytics"],
-  dataSharing: true,
-  thirdParties: "Service providers and advertising partners mentioned",
-  retention: "Not clearly specified",
-  deletion: "Users can request deletion by email",
-  concerns: ["Retention period is not stated"]
-};
-
-// A policy that says very little: tests the "Not specified" fallbacks.
-export const MOCK_POLICY_ANALYSIS_VAGUE = {
-  dataCollected: [],
-  purposes: [],
-  dataSharing: false,
-  thirdParties: "",
-  retention: "",
-  deletion: "",
-  concerns: []
-};
-
-/* ---------- scenarios ---------- */
-
-const highRiskScan = makeScan({
-  hostname: "example.com", path: "/login", forms: 3,
-  fields: { name: 1, email: 2, phone: 1, address: 1, password: 1 },
-  cookiesFirst: 9, cookiesThird: 5, scripts: 6,
-  trackers: { analytics: 3, advertising: 2, social: 1, unknown: 1 },
-  policy: makePolicy("example.com")
-});
-const highRiskRecs = [
-  "Review third-party tracking before signing up.",
-  "Check the privacy policy for data deletion information."
-];
-const highRiskBreakdown = { personalData: 30, trackers: 20, security: 3, policy: 14 };
+export const MOCK_POLICY_ANALYSIS = { dataCollected: [], purposes: [], dataSharing: false, thirdParties: "", retention: "", deletion: "", concerns: [] };
 
 export const SCENARIOS = {
-  // 6 / Low: a simple page with one newsletter field
-  lowRisk: makeReport(
-    makeScan({
-      hostname: "quietnotes.example", forms: 1, fields: { email: 1 },
-      cookiesFirst: 2, policy: makePolicy("quietnotes.example")
-    }),
-    { personalData: 4, trackers: 0, security: 0, policy: 2 },
-    [
-      "This page collects very little data and uses no known trackers.",
-      "Read the privacy policy before subscribing if you want to know how your email is used."
-    ]
-  ),
-
-  // 28 / Moderate: a signup page with analytics
-  moderate: makeReport(
-    makeScan({
-      hostname: "greenbasket.example", path: "/signup", forms: 1,
-      fields: { name: 1, email: 1, password: 1 },
-      cookiesFirst: 5, cookiesThird: 2, scripts: 3, trackers: { analytics: 2 },
-      policy: makePolicy("greenbasket.example")
-    }),
-    { personalData: 14, trackers: 8, security: 0, policy: 6 },
-    [
-      "Use a unique password for this account.",
-      "Analytics trackers are present. Check the cookie settings if you want to limit them."
-    ]
-  ),
-
-  // 67 / High: the default scenario
-  highRisk: makeReport(highRiskScan, highRiskBreakdown, highRiskRecs),
-
-  // 91 / Very High: not secure, sensitive data, heavy tracking, no policy found
-  veryHigh: makeReport(
-    makeScan({
-      hostname: "bigdeals.example", path: "/checkout", https: false, forms: 4,
-      fields: { name: 2, email: 1, phone: 1, address: 2, dob: 1, password: 1, financial: 3, governmentId: 1 },
-      cookiesFirst: 8, cookiesThird: 19, scripts: 22,
-      trackers: { analytics: 5, advertising: 9, social: 3, unknown: 5 }
-    }),
-    { personalData: 34, trackers: 30, security: 15, policy: 12 },
-    [
-      "Do not enter payment details on a page that is not secure (HTTP).",
-      "Many advertising trackers are present. Consider a tracker blocker.",
-      "No privacy policy was found. Check the site's footer or its sign-up page."
-    ]
-  ),
-
-  // 31 / Moderate: policy not on this page, but privacy-related links exist
-  noPolicy: makeReport(
-    makeScan({
-      hostname: "gadgetshop.example", path: "/account/login", forms: 2,
-      fields: { email: 1, password: 1 },
-      cookiesFirst: 4, cookiesThird: 1, scripts: 2, trackers: { analytics: 1, unknown: 1 },
-      policy: {
-        found: false, url: null,
-        candidates: [
-          { text: "Terms & Privacy", href: "https://gadgetshop.example/terms" },
-          { text: "Data Policy", href: "https://gadgetshop.example/data" }
-        ]
-      }
-    }),
-    { personalData: 10, trackers: 6, security: 0, policy: 15 },
-    ["No privacy policy was found on this page. Open one of the links above to check."]
-  ),
-
-  // 2 / Low: nothing detected at all
-  zeroData: makeReport(
-    makeScan({ hostname: "staticpage.example", policy: makePolicy("staticpage.example") }),
-    { personalData: 0, trackers: 0, security: 0, policy: 2 },
-    ["No forms, cookies or trackers were found on this page."]
-  ),
-
-  // High, after the user clicked Analyze policy
-  withPolicyAnalysis: makeReport(highRiskScan, highRiskBreakdown, highRiskRecs, {
-    policyAnalysis: MOCK_POLICY_ANALYSIS
-  }),
-
-  // High, with a policy summary that says almost nothing
-  withVaguePolicy: makeReport(highRiskScan, highRiskBreakdown, highRiskRecs, {
-    policyAnalysis: MOCK_POLICY_ANALYSIS_VAGUE
-  }),
-
-  // High, with a module that failed to respond
-  withWarnings: makeReport(highRiskScan, highRiskBreakdown, highRiskRecs, {
-    warnings: ["Tracker module did not respond. Tracker counts may be incomplete."]
-  })
+  lowRisk: makeReport({ hostname: "quietnotes.example", forms: 1, fields: { email: 1 }, breakdown: { personalData: 1, trackers: 0, security: 0 }, recommendations: ["No notable privacy concerns were found on this page."] }),
+  moderate: makeReport({ hostname: "greenbasket.example", path: "/signup", forms: 1, fields: { name: 1, email: 1, password: 1 }, first: 5, third: 2, trackers: { analytics: 2 }, scripts: 2, breakdown: { personalData: 5, trackers: 6, security: 0 }, recommendations: ["2 analytics tracker(s) found. These measure how you use the site."] }),
+  highRisk: makeReport({ hostname: "example.com", path: "/login", forms: 3, fields: { name: 1, email: 2, phone: 1, address: 1, password: 1 }, first: 9, third: 5, trackers: { analytics: 3, advertising: 2, social: 1, unknown: 1 }, scripts: 6, breakdown: { personalData: 14, trackers: 25, security: 0 }, recommendations: ["2 advertising tracker(s) found. Consider a tracker blocker or declining non-essential cookies.", "5 third-party cookies are set. Consider blocking third-party cookies in your browser."] }),
+  veryHigh: makeReport({ hostname: "bigdeals.example", path: "/checkout", https: false, forms: 1, fields: { email: 1, password: 1, financial: 2 }, first: 2, third: 8, trackers: { advertising: 6, unknown: 2 }, scripts: 8, breakdown: { personalData: 20, trackers: 40, security: 20 }, recommendations: ["This page is not secure (HTTP). Do not enter passwords or payment details here."] }),
+  zeroData: makeReport({ hostname: "staticpage.example", breakdown: { personalData: 0, trackers: 0, security: 0 }, recommendations: ["No notable privacy concerns were found on this page."] }),
+  withWarnings: makeReport({ hostname: "example.com", fields: { email: 1 }, breakdown: { personalData: 1, trackers: 0, security: 0 }, recommendations: ["No notable privacy concerns were found on this page."], warnings: ["Tracker scanner did not respond. Tracker counts may be incomplete."] })
 };
-
-/* ---------- errors (docs/contract.md section 8) ---------- */
 
 export const ERRORS = {
   restrictedPage: { error: true, code: "RESTRICTED_PAGE", message: "Extensions cannot run on this page." },
   timeout: { error: true, code: "SCAN_TIMEOUT", message: "A module did not respond in time." },
   backendDown: { error: true, code: "BACKEND_UNREACHABLE", message: "Could not reach the PrivacyGuard server." },
   policyFetchFailed: { error: true, code: "POLICY_FETCH_FAILED", message: "Policy page could not be fetched." },
-  geminiFailed: { error: true, code: "GEMINI_FAILED", message: "AI analysis failed." },
+  geminiFailed: { error: true, code: "GEMINI_FAILED", message: "AI analysis is not part of Phase 1." },
   invalidInput: { error: true, code: "INVALID_INPUT", message: "Request did not match the contract." }
 };
 
-/* ---------- access helpers ---------- */
-
-// Always return copies, so a test that edits a report never changes the shared mock.
 export const getScenario = (name) => structuredClone(SCENARIOS[name]);
 export const getError = (name) => structuredClone(ERRORS[name]);
-
-// Older names, kept so existing imports keep working.
 export const MOCK_REPORT = SCENARIOS.highRisk;
 export const MOCK_SCAN = MOCK_REPORT.scan;
 export const MOCK_RESULT = MOCK_REPORT.result;
 
-/* ---------- consistency checker ---------- */
-
-// Returns a list of problems. An empty list means the report follows the contract's numeric rules.
-// Works on mock data and on real reports, so use it in tests and in integration.
 export function assertConsistent(report) {
   const problems = [];
   const { scan, result } = report ?? {};
   if (!scan || !result) return ["Report needs both scan and result."];
-
-  const types = scan.scanner?.fieldTypes ?? {};
-  for (const k of FIELD_KEYS) {
-    if (typeof types[k] !== "number") problems.push(`fieldTypes.${k} is missing or not a number`);
-  }
-  if (sum(types) !== scan.scanner?.personalDataFields) {
-    problems.push(`personalDataFields (${scan.scanner?.personalDataFields}) does not equal the sum of fieldTypes (${sum(types)})`);
-  }
-
-  const c = scan.tracking?.cookies;
-  if (!c || c.total !== c.firstParty + c.thirdParty) {
-    problems.push("cookies.total does not equal firstParty + thirdParty");
-  }
-
-  for (const k of ["analytics", "advertising", "social", "unknown"]) {
-    if (typeof scan.tracking?.trackers?.[k] !== "number") problems.push(`trackers.${k} is missing or not a number`);
-  }
-
-  if (scan.policy?.found && typeof scan.policy.url !== "string") {
-    problems.push("policy.found is true but policy.url is not a string");
-  }
-
-  const total = result.breakdown ? sum(result.breakdown) : NaN;
-  if (total !== result.riskScore) {
-    problems.push(`riskScore (${result.riskScore}) does not equal the sum of breakdown (${total})`);
-  }
-  if (!(result.riskScore >= 0 && result.riskScore <= 100)) problems.push("riskScore must be between 0 and 100");
-  if (result.riskLevel !== levelFromScore(result.riskScore)) {
-    problems.push(`riskLevel "${result.riskLevel}" does not match score ${result.riskScore} (expected "${levelFromScore(result.riskScore)}")`);
-  }
+  if (Object.values(scan.scanner?.fieldTypes ?? {}).reduce((a, b) => a + b, 0) !== scan.scanner?.personalDataFields) problems.push("personalDataFields does not equal the sum of fieldTypes");
+  const cookies = scan.tracking?.cookies;
+  if (!cookies || cookies.total !== cookies.firstParty + cookies.thirdParty) problems.push("cookies.total does not equal firstParty + thirdParty");
+  const total = result.breakdown ? Object.values(result.breakdown).reduce((a, b) => a + b, 0) : NaN;
+  if (total !== result.riskScore) problems.push("riskScore does not equal breakdown sum");
+  if (result.riskLevel !== levelFromScore(result.riskScore)) problems.push("riskLevel does not match score");
+  if (result.breakdown && Object.keys(result.breakdown).sort().join(",") !== "personalData,security,trackers") problems.push("Phase 1 breakdown must contain only personalData, trackers and security");
   return problems;
 }

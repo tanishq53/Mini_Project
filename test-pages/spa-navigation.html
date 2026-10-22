@@ -1,3 +1,20 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Test page: spa-navigation</title></head>
-<body><h1>Test page: spa-navigation</h1><p>Placeholder. Tanishq builds this page in Phase 3.</p></body></html>
+<html lang="en"><head><meta charset="UTF-8"><title>SPA navigation test</title></head>
+<body>
+  <h1>SPA navigation test</h1>
+  <p>Use the buttons to change the route and form without a full page reload. The open panel should rescan.</p>
+  <button id="route">Change route</button>
+  <button id="content">Add email field</button>
+  <main id="view"><p>Initial view: no fields.</p></main>
+  <script>
+    document.getElementById("route").addEventListener("click", () => {
+      history.pushState({}, "", "?view=" + Date.now());
+      document.querySelector("h1").textContent = "SPA route changed";
+    });
+    document.getElementById("content").addEventListener("click", () => {
+      const form = document.createElement("form");
+      form.innerHTML = '<label>Email <input type="email" name="email"></label>';
+      document.getElementById("view").replaceChildren(form);
+    });
+  </script>
+</body></html>
