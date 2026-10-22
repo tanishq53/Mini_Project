@@ -9,6 +9,7 @@ import {
 } from "./ui.js";
 import { source } from "./source.js";
 import { mountDevPicker } from "./devPicker.js";
+import { getReport } from "../utils/storage.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -58,6 +59,16 @@ async function startScan() {
         tab = await getActiveTab();
         setScanningSite(hostOf(tab?.url));
         showState("scanning");
+
+        // Show this tab's last result while the fresh scan runs.
+        if (!USE_MOCK && tab?.id != null) {
+            const cached = await getReport(tab.id);
+            if (cached) {
+                report = cached;
+                renderReport(cached);
+                showState("result");
+            }
+        }
 
         if (!USE_MOCK && isRestricted(tab?.url)) {
             throw { error: true, code: "RESTRICTED_PAGE" };
@@ -119,6 +130,12 @@ if (!USE_MOCK) {
     chrome.tabs.onActivated.addListener(scheduleScan);
     chrome.tabs.onUpdated.addListener((tabId, info, changedTab) => {
         if (info.status === "complete" && changedTab.active) scheduleScan();
+    });
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.type !== "REPORT_READY" || message.payload?.tabId !== tab?.id || busy) return;
+        report = message.payload.report;
+        renderReport(report);
+        showState("result");
     });
     startScan();
 } else {

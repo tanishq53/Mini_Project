@@ -1,8 +1,8 @@
 # PrivacyGuard
 
-A Chrome extension that analyzes the privacy risks of the website you are visiting.
+A Chrome extension that estimates the privacy exposure of the website you are visiting.
 
-PrivacyGuard scans the current page for personal-data forms, cookies, third-party trackers and privacy-policy links, sends the findings to a FastAPI backend, and shows a Privacy Risk Score (0 to 100) with recommendations. An AI summary of the privacy policy is generated on request using the Gemini API.
+PrivacyGuard scans the current page for personal-data fields, cookies, third-party scripts and HTTPS status, sends the findings to a FastAPI backend, and shows a Privacy Exposure Score (0 to 100) with recommendations. Phase 1 does not analyze privacy policies or use AI.
 
 PrivacyGuard is an awareness and screening tool. It does not guarantee detection of every privacy issue and is not a legal compliance check.
 
@@ -10,9 +10,8 @@ PrivacyGuard is an awareness and screening tool. It does not guarantee detection
 
 - Detects forms and personal-data input fields (name, email, phone, address, date of birth, password and more)
 - Detects cookies, third-party scripts and known trackers
-- Finds privacy-policy links, including after navigating to a login or signup page
-- Calculates a Privacy Risk Score and risk level
-- AI-generated privacy-policy summary (on request)
+- Calculates a deterministic exposure score and risk level
+- Rescans after page loads, tab changes, SPA route changes and relevant dynamic content changes
 - Read-only scanning: it never clicks buttons, submits forms, or collects what you type
 
 ## Project structure
@@ -54,7 +53,7 @@ Contributing rules and the branch workflow are in [CONTRIBUTING.md](CONTRIBUTING
 
 ## Status
 
-Phase 1: project skeleton. Modules are stubs that return empty results in the format defined in the contract.
+Phase 1 implementation: page scanning, background orchestration, backend scoring and the side panel. Policy discovery and Gemini analysis are reserved for Phase 2. See [docs/testing/test-cases.md](docs/testing/test-cases.md) for the manual checks.
 
 ## License
 

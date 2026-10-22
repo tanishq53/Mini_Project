@@ -1,0 +1,54 @@
+﻿PRIVACYGUARD — TEAMMATE AI INSTRUCTIONS
+======================================
+Phase 1 only. These prompts are for Varsha, Namitha, and Sushanth. Privacy-policy discovery and analysis are out of scope; do not build or change those features.
+
+Before using a prompt
+---------------------
+1. Give the AI this instruction file and the latest PrivacyGuard team context file.
+2. Also provide the source files listed under your name, plus docs/contract.md and docs/scoring.md when relevant.
+3. The repository's current docs/contract.md and docs/scoring.md take priority if the team context file differs.
+4. Work only in your owned files. Do not change the shared contract, another person's files, or the Phase 2 policy features.
+5. Do not read, store, or send typed field values. Never handle passwords or credentials. Scanning is read-only.
+6. Preserve the exact JSON fields and message shapes in docs/contract.md. Do not silently change a contract or scoring rule.
+7. If you find an issue outside your ownership, describe it and name the owner instead of editing that person's file.
+8. Give complete replacement files when proposing code. Explain the reason for important logic in short comments.
+9. Be precise about verification: report which tests or manual checks you actually ran and their results. Do not claim unrun checks pass.
+
+VARsha N G — website scanner
+-----------------------------
+Owned file: extension/content/scanner.js
+
+Paste this prompt:
+
+I am Varsha, responsible for PrivacyGuard's Phase 1 website scanner. Read the project instruction file and the latest team context. Follow docs/contract.md and work only on extension/content/scanner.js.
+
+Review and improve the scanner for detecting personal-data fields from DOM attributes and associated static labels only. Never read element.value or collect anything the user typed. Never click or submit anything. Keep the output exactly compatible with the scanner object in docs/contract.md: forms, personalDataFields, all eight fieldTypes keys, and the optional safe fields metadata list. Ensure personalDataFields equals the sum of fieldTypes and each field is counted once.
+
+Check coverage for late-added fields, standalone fields, unlabeled fields, fields in iframes (state the frame limitation), and look-alike terms such as company_name or passport where classification could be wrong. Use the existing test pages, especially login-with-policy.html and many-forms.html, as Phase 1 scanner fixtures. Do not implement or modify privacy-policy detection. Do not edit any file outside my ownership. Return a complete scanner.js and a short summary of checks actually performed; if a needed fix belongs to another module, report it without editing that file.
+
+NAMITHA K — tracker detection
+-----------------------------
+Owned Phase 1 file: extension/content/tracker.js
+
+Paste this prompt:
+
+I am Namitha, responsible for PrivacyGuard's Phase 1 tracker detection. Read the project instruction file and the latest team context. Follow docs/contract.md and docs/scoring.md, and work only on extension/content/tracker.js. Privacy-policy discovery and policyDetector.js are out of scope for this task; do not edit them.
+
+Review the tracker scan for third-party script domains, correct category classification, and false positives from a site's own domains or same-company domains. Apply the first-party rule: compare registrable sites, handle common two-part suffixes (such as co.uk), preserve localhost and IP addresses, and maintain a concise, easy-to-edit same-company domain list. Check the most specific tracker categories first so social domains are not classified as advertising. Count unique script domains as the current contract describes unless the team has approved a different rule. Return the required tracking object, including zero counts and a valid trackerList, even when there are no matches or an error occurs. Never read cookies, form values, passwords, or user-entered data, and do not call the backend.
+
+Use many-trackers.html as the fixture. Its expected unique-domain counts are analytics 3, advertising 2, social 1, unknown 1, with 7 third-party script domains total. Also check a same-site script and a same-company domain to guard against false positives. Do not change the output contract or edit files outside my ownership. Return a complete tracker.js and report the exact checks actually performed.
+
+SUSHANTH A — FastAPI backend and risk engine
+--------------------------------------------
+Owned files: everything in backend/
+
+Paste this prompt:
+
+I am Sushanth, responsible for PrivacyGuard's Phase 1 FastAPI backend, risk engine, and database. Read the project instruction file and the latest team context. Follow docs/contract.md and docs/scoring.md. Work only in backend/; privacy-policy analysis, Gemini integration, and POST /analyze-policy are out of scope for Phase 1.
+
+Check that POST /scan accepts the merged scan contract and returns an integer riskScore from 0 to 100, riskLevel, exactly the three Phase 1 breakdown keys (personalData, trackers, security), and at most five plain-language recommendations. The breakdown must sum exactly to the score. Verify that the risk engine is deterministic, pure, and matches docs/scoring.md, including the clean-HTTPS context discount, third-party-cookie rule, tracker weights, caps, security points, and the rule that missing https is treated as secure. Keep validation errors in the agreed INVALID_INPUT response format with HTTP 400. Ensure scans still work without MongoDB configuration by using in-memory storage. Never store user-entered values or secrets.
+
+Check backend/requirements.txt is UTF-8 and fill in backend/README.md with Windows-friendly setup and run steps. Keep API keys and database URIs in an ignored .env file; commit only placeholders in .env.example. The weights/context rule and the HTTP sensitive-field outcome are team decisions: do not change them silently. Report any discrepancy and ask the team to confirm before changing scoring behavior. Run the backend tests if the environment permits, and report the exact command and result. Return complete replacement files for anything changed and list the files touched.
+
+End of instructions
+-------------------

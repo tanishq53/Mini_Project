@@ -1,3 +1,12 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Test page: no-policy</title></head>
-<body><h1>Test page: no-policy</h1><p>Placeholder. Tanishq builds this page in Phase 3.</p></body></html>
+<html lang="en"><head><meta charset="UTF-8"><title>Page without policy link</title></head>
+<body>
+  <h1>No policy link</h1>
+  <p>Expected Phase 1 scan: one form, two personal fields (email 1, phone 1), no third-party scripts.</p>
+  <form onsubmit="return false">
+    <label>Email <input type="email" name="email"></label>
+    <label>Phone <input type="tel" name="phone"></label>
+    <button type="submit">Continue</button>
+  </form>
+  <p>There is intentionally no privacy-policy link. Policy detection is outside the Phase 1 test.</p>
+</body></html>
