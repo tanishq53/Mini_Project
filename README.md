@@ -55,6 +55,3 @@ Contributing rules and the branch workflow are in [CONTRIBUTING.md](CONTRIBUTING
 
 Phase 1 implementation: page scanning, background orchestration, backend scoring and the side panel. Policy discovery and Gemini analysis are reserved for Phase 2. See [docs/testing/test-cases.md](docs/testing/test-cases.md) for the manual checks.
 
-## License
-
-MIT. See [LICENSE](LICENSE).
