@@ -40,7 +40,8 @@ def test_breakdown_has_exactly_the_phase_1_keys():
 
 def test_personal_data_points():
     # name 1 + email 2*2 + phone 3 + address 4 + password 2 = 14
-    r = calculate_risk(make_scan({"name": 1, "email": 2, "phone": 1, "address": 1, "password": 1}))
+    # A known tracker removes the clean-HTTPS discount.
+    r = calculate_risk(make_scan({"name": 1, "email": 2, "phone": 1, "address": 1, "password": 1}, trackers={"analytics": 1}))
     assert r["breakdown"]["personalData"] == 14
 
 
@@ -99,7 +100,39 @@ def test_unknown_keys_are_ignored():
     scan = make_scan({"email": 1})
     scan["policy"] = {"found": False}
     scan["somethingNew"] = 123
-    assert calculate_risk(scan)["riskScore"] == 2
+    assert calculate_risk(scan)["riskScore"] == 1
+
+
+def test_clean_https_halves_personal_data_rounding_up():
+    one_field = calculate_risk(make_scan({"name": 1}))
+    assert one_field["breakdown"]["personalData"] == 1
+    # name 1 + email 2 = 3; ceil(3 / 2) = 2.
+    two_fields = calculate_risk(make_scan({"name": 1, "email": 1}))
+    assert two_fields["breakdown"]["personalData"] == 2
+
+
+def test_unknown_scripts_do_not_remove_clean_https_discount():
+    scan = make_scan({"email": 2}, trackers={"unknown": 4})
+    assert calculate_risk(scan)["breakdown"]["personalData"] == 2
+
+
+@pytest.mark.parametrize("changes", [
+    {"https": False},
+    {"trackers": {"analytics": 1}},
+    {"trackers": {"advertising": 1}},
+    {"trackers": {"social": 1}},
+    {"third_party_cookies": 1},
+])
+def test_exposure_context_counts_personal_data_in_full(changes):
+    scan = make_scan({"email": 2}, **changes)
+    assert calculate_risk(scan)["breakdown"]["personalData"] == 4
+
+
+def test_personal_data_cap_applies_after_clean_https_discount():
+    scan = make_scan({"financial": 4})
+    assert calculate_risk(scan)["breakdown"]["personalData"] == 16
+    capped = calculate_risk(make_scan({"financial": 8}))
+    assert capped["breakdown"]["personalData"] == CAP_PERSONAL_DATA
 
 
 def test_recommendations_are_limited_ordered_and_have_no_policy_text():

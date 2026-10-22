@@ -1,6 +1,6 @@
 """Pydantic models that mirror docs/contract.md (version 1.2) exactly.
 Field names are camelCase and case-sensitive, so we use them as-is."""
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -65,7 +65,7 @@ class Policy(Loose):
     # Phase 1: accepted but ignored by the risk engine.
     found: bool = False
     url: Optional[str] = None
-    candidates: List[Dict[str, Any]] = []
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ScanRequest(Loose):
@@ -75,19 +75,31 @@ class ScanRequest(Loose):
     https: Optional[bool] = None  # only an explicit false is penalised
     scanner: Scanner
     tracking: Tracking
-    policy: Policy = Policy()
+    policy: Policy = Field(default_factory=Policy)
 
 
 class Breakdown(Loose):
-    personalData: int
-    trackers: int
-    security: int
+    personalData: int = Field(ge=0)
+    trackers: int = Field(ge=0)
+    security: int = Field(ge=0)
 
 
 class ScanResponse(Loose):
     id: str
     url: str
     riskScore: int = Field(ge=0, le=100)
-    riskLevel: str
+    riskLevel: Literal["Low", "Moderate", "High", "Very High"]
     breakdown: Breakdown
-    recommendations: List[str]
+    recommendations: List[str] = Field(max_length=5)
+
+    @model_validator(mode="after")
+    def check_score(self):
+        if sum(self.breakdown.model_dump().values()) != self.riskScore:
+            raise ValueError("breakdown must sum to riskScore")
+        expected = next(
+            level for upper, level in [(25, "Low"), (50, "Moderate"), (75, "High"), (100, "Very High")]
+            if self.riskScore <= upper
+        )
+        if self.riskLevel != expected:
+            raise ValueError("riskLevel must match riskScore")
+        return self
