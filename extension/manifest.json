@@ -4,10 +4,8 @@
   "version": "0.1.0",
   "description": "Estimate website privacy exposure from forms, cookies, trackers and HTTPS.",
   "permissions": [
-    "activeTab",
     "scripting",
     "storage",
-    "tabs",
     "cookies",
     "sidePanel",
     "webNavigation"
@@ -29,6 +27,10 @@
   },
   "side_panel": {
     "default_path": "popup/popup.html"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {

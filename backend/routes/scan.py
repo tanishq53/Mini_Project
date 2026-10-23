@@ -13,10 +13,12 @@ def scan(request: ScanRequest) -> dict:
     scan_dict = request.model_dump()
     outcome = calculate_risk(scan_dict)
 
-    # Contract rule: the three parts add up EXACTLY to riskScore.
-    assert sum(outcome["breakdown"].values()) == outcome["riskScore"]
+    # Keep the API invariant explicit even when Python runs with assertions disabled.
+    if sum(outcome["breakdown"].values()) != outcome["riskScore"]:
+        raise RuntimeError("Risk engine returned an inconsistent breakdown.")
 
-    scan_id = "scan_" + uuid.uuid4().hex[:8]
+    # Full UUID entropy keeps report identifiers impractical to guess.
+    scan_id = "scan_" + uuid.uuid4().hex
     result = {"id": scan_id, "url": request.url, **outcome}
-    save_scan(scan_id, scan_dict, result)
+    save_scan(scan_id, result)
     return result

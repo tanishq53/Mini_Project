@@ -310,6 +310,10 @@ export function errorCopy(code, fallbackMessage) {
             "Can't reach the PrivacyGuard server",
             "Start the backend on port 8000 and try again."
         ],
+        SERVER_MISCONFIGURED: [
+            "Backend is not configured",
+            "Set the API key in the backend environment and in PrivacyGuard settings."
+        ],
         POLICY_FETCH_FAILED: [
             "Couldn't read the privacy policy",
             "The policy page did not load. Open it in a tab and scan that page instead."
@@ -321,6 +325,22 @@ export function errorCopy(code, fallbackMessage) {
         INVALID_INPUT: [
             "Unexpected data",
             "A module returned data in the wrong format. Check it against docs/contract.md."
+        ],
+        AUTH_REQUIRED: [
+            "Backend authentication required",
+            "Add the backend bearer token in PrivacyGuard settings, or check with the backend administrator."
+        ],
+        RATE_LIMITED: [
+            "Too many scans",
+            "Wait a minute before scanning again."
+        ],
+        HTTPS_REQUIRED: [
+            "Secure connection required",
+            "The backend must be accessed over HTTPS outside local development."
+        ],
+        PAYLOAD_TOO_LARGE: [
+            "Page scan is too large",
+            "This page contains more scan metadata than the backend accepts."
         ]
     };
     const [title, message] = copy[code] ?? ["Something went wrong", fallbackMessage || "Try again."];

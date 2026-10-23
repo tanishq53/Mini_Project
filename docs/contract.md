@@ -1,6 +1,6 @@
 # PrivacyGuard Data Contract
 
-**Version:** 1.2
+**Version:** 1.3
 **Maintainer:** Tanishq Gautam (integration)
 **Status:** Frozen for development. Changes need team agreement (see section 9).
 
@@ -116,7 +116,7 @@ Sent as `SCAN_RESULT` with `source: "tracker"`. The payload contains both object
 ```json
 {
   "tracking": {
-    "thirdPartyScripts": 6,
+    "thirdPartyScripts": 7,
     "trackers": {
       "analytics": 3,
       "advertising": 2,
@@ -141,7 +141,7 @@ Sent as `SCAN_RESULT` with `source: "tracker"`. The payload contains both object
 | Field | Type | Notes |
 |---|---|---|
 | `trackers.*` | integer | Known services only go in analytics, advertising or social. Unrecognised third-party scripts go in `unknown`. |
-| `trackerList` | array | Optional, used for the details view |
+| `trackerList` | array | Optional, used for the details view. When present, it must match `thirdPartyScripts` and each category count. |
 | `policy.found` | boolean | True if at least one confident privacy policy link exists |
 | `policy.url` | string or null | Best match. `null` if not found. |
 | `policy.candidates` | array | All privacy-related links. Used for the "possible links" fallback when `found` is false. |
@@ -161,7 +161,7 @@ Built by `background.js`. Sent as the body of `POST /scan`.
   "scanner": { },
   "tracking": {
     "cookies": { "total": 14, "firstParty": 9, "thirdParty": 5 },
-    "thirdPartyScripts": 6,
+    "thirdPartyScripts": 7,
     "trackers": { "analytics": 3, "advertising": 2, "social": 1, "unknown": 1 }
   },
   "policy": { }
@@ -169,6 +169,7 @@ Built by `background.js`. Sent as the body of `POST /scan`.
 ```
 
 `scanner` and `policy` are copied unchanged from sections 4.1 and 4.2. `tracking.cookies` is added by background using `chrome.cookies`.
+`thirdPartyScripts` counts unique script hostnames and equals the sum of the four tracker categories.
 
 Defaults: if a module fails or does not respond, background fills its section with zeros (or `found: false` for policy) and adds a warning, rather than blocking the scan.
 
@@ -291,8 +292,13 @@ All errors, from any module or the backend, use this shape:
 | `POLICY_FETCH_FAILED` | Policy page could not be fetched |
 | `GEMINI_FAILED` | AI analysis failed or timed out |
 | `INVALID_INPUT` | Request did not match this contract |
+| `AUTH_REQUIRED` | A valid bearer token is required when API authentication is enabled |
+| `RATE_LIMITED` | The caller exceeded the configured API request limit |
+| `PAYLOAD_TOO_LARGE` | The scan request exceeded the configured byte limit |
+| `HTTPS_REQUIRED` | Production API was reached without HTTPS |
+| `SERVER_MISCONFIGURED` | API key or required production security configuration is missing |
 
-Backend errors should use HTTP status codes (400 for invalid input, 500 for server errors, 502 or 504 for Gemini failures) with the body above.
+Backend errors use the same body shape with HTTP 400 for invalid input, 401 for missing or invalid authentication, 403 for HTTPS enforcement, 413 for oversized requests, 429 for rate limits, 500 for server errors, 503 for missing security configuration, and 502 or 504 for future Gemini failures.
 
 ## 9. Rules for everyone
 
@@ -317,3 +323,4 @@ Backend errors should use HTTP status codes (400 for invalid input, 500 for serv
 | 1.0 | 2026-10-02 | Initial contract |
 | 1.1 | 2026-10-03 | Messages: added reply column, `PAGE_CHANGED`, `SCAN_STARTED`, `PING`. `START_SCAN` and `ANALYZE_POLICY` are answered directly; `REPORT_READY` and `SCAN_ERROR` are only pushed for automatic rescans. No change to any module's output. |
 | 1.2 | 2026-10-03 | Added Phase scope section. Phase 1 has no policy analysis. `breakdown` has three keys (`personalData`, `trackers`, `security`) and sums exactly to `riskScore`. `/analyze-policy` marked Phase 2. Scoring model referenced in `docs/scoring.md`. Content-script output formats unchanged. |
+| 1.3 | 2026-10-22 | Added security error codes for bearer authentication, rate limiting, request-size limits, HTTPS enforcement, and production misconfiguration. The scan JSON shape is unchanged. |

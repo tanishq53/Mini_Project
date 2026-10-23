@@ -1,0 +1,48 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies and security tools
+        run: python -m pip install -r backend/requirements.txt bandit pip-audit
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest -q
+      - name: Run Bandit
+        working-directory: backend
+        run: bandit -r main.py middleware.py models.py routes services database
+      - name: Audit dependencies
+        working-directory: backend
+        run: pip-audit -r requirements.txt
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check extension scripts and scanner cases
+        run: |
+          node --check extension/options/options.js
+          node --check extension/utils/api.js
+          node --check extension/popup/ui.js
+          node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json', 'utf8'))"
+          node extension/content/scanner.test.js

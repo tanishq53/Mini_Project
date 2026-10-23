@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PrivacyGuard settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>PrivacyGuard settings</h1>
+    <form id="settings-form">
+      <label for="backend-url">Backend URL</label>
+      <input id="backend-url" name="backend-url" type="url" required autocomplete="url">
+      <p>Use HTTPS for remote servers. HTTP is allowed only for localhost development.</p>
+
+      <label for="api-token">Bearer token</label>
+      <input id="api-token" name="api-token" type="password" autocomplete="new-password" spellcheck="false">
+      <p>Stored in this extension's local storage. Do not use a shared production secret here; extension users can inspect client-side tokens.</p>
+
+      <button type="submit">Save settings</button>
+      <output id="status" aria-live="polite"></output>
+    </form>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
