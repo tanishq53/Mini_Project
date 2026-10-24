@@ -5,7 +5,8 @@
 import { USE_MOCK } from "../utils/config.js";
 import {
     showState, setScanningSite, renderReport, renderPolicyAnalysis,
-    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy, applyPhaseSwitch
+    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy,
+    applyPhaseSwitch, renderReputation
 } from "./ui.js";
 import { source } from "./source.js";
 import { mountDevPicker } from "./devPicker.js";
@@ -18,6 +19,7 @@ let tab = null;      // the tab being scanned
 let busy = false;    // true while a scan or analysis is running
 let rescanQueued = false; // the page changed while a scan was running
 let timer = null;    // debounce for automatic scans
+let reputationRequestId = 0;
 
 /* ---------- helpers ---------- */
 
@@ -43,6 +45,24 @@ function toError(err) {
 
 const smooth = () => (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
+async function checkReputation(targetReport, targetTabId) {
+    const requestId = ++reputationRequestId;
+    renderReputation({ status: "checking" });
+    try {
+        const result = await chrome.runtime.sendMessage({
+            type: "CHECK_REPUTATION",
+            payload: { url: targetReport.scan.url }
+        });
+        if (requestId !== reputationRequestId || report !== targetReport || tab?.id !== targetTabId) return;
+        renderReputation(result);
+    } catch (err) {
+        console.warn("PrivacyGuard: could not display site reputation", err);
+        if (requestId === reputationRequestId && report === targetReport && tab?.id === targetTabId) {
+            renderReputation({ status: "unavailable" });
+        }
+    }
+}
+
 /* ---------- actions ---------- */
 
 // Real mode: background.js runs the scan and calls the backend (contract: START_SCAN).
@@ -67,6 +87,7 @@ async function startScan() {
                 report = cached;
                 renderReport(cached);
                 showState("result");
+                checkReputation(cached, tab.id);
             }
         }
 
@@ -77,6 +98,8 @@ async function startScan() {
         report = USE_MOCK ? await source.scan(tab?.id) : await scanReal(tab?.id);
         renderReport(report);
         showState("result");
+        if (!USE_MOCK && tab?.id != null) checkReputation(report, tab.id);
+        else renderReputation({ status: "mock" });
         window.scrollTo(0, 0);
     } catch (err) {
         report = null;
@@ -136,6 +159,7 @@ if (!USE_MOCK) {
         report = message.payload.report;
         renderReport(report);
         showState("result");
+        if (tab?.id != null) checkReputation(report, tab.id);
     });
     startScan();
 } else {

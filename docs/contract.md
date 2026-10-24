@@ -10,7 +10,7 @@ This document defines the JSON shapes and messages that connect every PrivacyGua
 
 PrivacyGuard is built in two phases.
 
-**Phase 1 (current):** scan the page for forms, cookies, trackers and HTTPS, and calculate the Privacy Risk Score. The scoring model is in `docs/scoring.md`. No Gemini, no policy analysis.
+**Phase 1 (current):** scan the page for forms, cookies, trackers and HTTPS, and calculate the Privacy Risk Score. The scoring model is in `docs/scoring.md`. A separate optional Google Safe Browsing check reports known domain threats; it does not change the privacy score. No Gemini, no policy analysis.
 
 **Phase 2 (later):** find the privacy policy and analyze it with Gemini (`/analyze-policy`, the Analyze policy button, a policy part in the score).
 
@@ -19,7 +19,7 @@ Everything for Phase 2 stays in this contract so the shapes do not change later,
 | Item | Phase 1 behaviour |
 |---|---|
 | `policy` object (4.2, 5) | Content scripts may return the zero-filled shape `{ found: false, url: null, candidates: [] }`. The engine and the panel ignore it. |
-| `POST /analyze-policy` (6.2) | Not implemented |
+| `POST /analyze-policy` (6.3) | Not implemented |
 | `ANALYZE_POLICY` message (3) | Not sent |
 | `policyAnalysis` in the report (7) | Always `null` |
 | `breakdown.policy` (6.1) | Not present. Phase 1 breakdown has three keys. |
@@ -48,6 +48,7 @@ Popup  ->  background.js  ->  content scripts (scanner, tracker, policy)
                 |
                 v
          REPORT_READY  ->  Popup dashboard
+Popup  ->  background.js  ->  POST /reputation -> Google Safe Browsing
 ```
 
 ## 3. Extension messages
@@ -59,7 +60,8 @@ All messages use `chrome.runtime.sendMessage` or `chrome.tabs.sendMessage`. Ever
 | `START_SCAN` | popup | background | `{ tabId }` | The report (section 7), or an error object |
 | `RUN_SCAN` | background | content scripts | `{}` | None. Content scripts answer with `SCAN_RESULT`. |
 | `SCAN_RESULT` | content script | background | `{ source, data }` (see section 4) | None |
-| `ANALYZE_POLICY` | popup | background | `{ tabId, policyUrl }` | The policy analysis (section 6.2), or an error object |
+| `ANALYZE_POLICY` | popup | background | `{ tabId, policyUrl }` | The policy analysis (section 6.3), or an error object |
+| `CHECK_REPUTATION` | popup | background | `{ url }` | Reputation result (section 6.2) |
 | `PAGE_CHANGED` | content script | background | `{ url, reason }` | None |
 | `SCAN_STARTED` | background | popup | `{ tabId, url }` | None |
 | `REPORT_READY` | background | popup | `{ tabId, report }` | None |
@@ -170,6 +172,8 @@ Built by `background.js`. Sent as the body of `POST /scan`.
 
 `scanner` and `policy` are copied unchanged from sections 4.1 and 4.2. `tracking.cookies` is added by background using `chrome.cookies`.
 
+The local report also retains `tracking.trackerList` and cookie details (`firstPartyList` and `thirdPartyList`, each containing only cookie `name` and `domain`) for the popup's expandable details. Cookie values are never read. These details are excluded from the `POST /scan` request; the backend receives cookie counts and tracker category counts only.
+
 Defaults: if a module fails or does not respond, background fills its section with zeros (or `found: false` for policy) and adds a warning, rather than blocking the scan.
 
 ## 6. Backend API (Sushanth)
@@ -209,6 +213,20 @@ Response:
 
 The score is calculated by the formula in `docs/scoring.md`. Reference implementation: `backend/services/risk_engine.py`.
 
+### 6.2 `POST /reputation`
+
+Checks the current website origin with Google Safe Browsing, independently of the privacy score. The extension sends the current page URL to the backend; the backend checks only its origin (`scheme://host[:port]/`) and does not send the page path, query, or fragment to Google.
+
+Request:
+
+```json
+{ "url": "https://example.com/account?private=value" }
+```
+
+Response status is `safe`, `unsafe`, `not_configured`, or `unavailable`. Unsafe responses include recognized `threatTypes` (`MALWARE`, `SOCIAL_ENGINEERING`, or `UNWANTED_SOFTWARE`). The backend needs `GOOGLE_SAFE_BROWSING_API_KEY` configured in its environment. It does not store reputation requests or results.
+
+This check identifies domains listed by Google as known threats; a clean result does not guarantee the site or its downloads are safe. The website origin is disclosed to Google. Follow Google's Safe Browsing API terms and usage requirements before deployment.
+
 Risk levels (proposed project thresholds, not an official standard):
 
 | Score | Level | UI colour |
@@ -218,7 +236,7 @@ Risk levels (proposed project thresholds, not an official standard):
 | 51 to 75 | High | Orange |
 | 76 to 100 | Very High | Red |
 
-### 6.2 `POST /analyze-policy` (Phase 2, not implemented in Phase 1)
+### 6.3 `POST /analyze-policy` (Phase 2, not implemented in Phase 1)
 
 Triggered only when the user clicks Analyze Policy.
 
@@ -249,7 +267,7 @@ Rules:
 - `dataSharing` is a boolean.
 - Gemini failure must return a normal error object (section 8), not a crash. The scan score still works without this endpoint.
 
-### 6.3 `GET /report/{id}`
+### 6.4 `GET /report/{id}`
 
 Returns the stored scan result and policy analysis (if one exists) for the given `id`. Used for history and re-scan comparison.
 

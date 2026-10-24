@@ -53,6 +53,16 @@
 
       <p class="muted score-note">Privacy exposure score. It measures what this page collects and shares. It does not judge whether the site is trustworthy.</p>
 
+      <div class="section" id="site-reputation">
+        <h2 class="section-title">Website reputation</h2>
+        <p class="muted reputation-note">Separate from the privacy score. The site's origin is sent to Google Safe Browsing; the page path and query are not.</p>
+        <div class="row">
+          <span class="row-name">Google Safe Browsing</span>
+          <span class="row-value"><span class="tag warn" id="reputation-status">Checking</span></span>
+        </div>
+        <p class="muted reputation-message" id="reputation-message" aria-live="polite">Checking the site's domain.</p>
+      </div>
+
       <div id="warnings"></div>
 
       <div class="section">
@@ -71,21 +81,12 @@
 
       <div class="section">
         <h2 class="section-title">Trackers</h2>
-        <div class="row"><span class="row-name">Analytics</span><span class="row-value" id="v-analytics">3</span></div>
-        <div class="row"><span class="row-name">Advertising</span><span class="row-value" id="v-advertising">2</span>
-        </div>
-        <div class="row"><span class="row-name">Social media</span><span class="row-value" id="v-social">1</span></div>
-        <div class="row"><span class="row-name">Unrecognised third party</span><span class="row-value"
-            id="v-unknown">1</span></div>
+        <div id="tracker-rows"></div>
       </div>
 
       <div class="section">
         <h2 class="section-title">Cookies</h2>
-        <div class="row"><span class="row-name">Total</span><span class="row-value" id="v-cookies">14</span></div>
-        <div class="row"><span class="row-name">First-party</span><span class="row-value" id="v-cookies-first">9</span>
-        </div>
-        <div class="row"><span class="row-name">Third-party</span><span class="row-value" id="v-cookies-third">5</span>
-        </div>
+        <div id="cookie-rows"></div>
       </div>
 
       <div class="section">

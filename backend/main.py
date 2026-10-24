@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from routes import report, scan
+from routes import report, reputation, scan
 
 log = logging.getLogger("privacyguard")
 app = FastAPI(title="PrivacyGuard API", version="1.2")
@@ -17,6 +17,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 app.include_router(scan.router)
 app.include_router(report.router)
+app.include_router(reputation.router)
 
 
 @app.exception_handler(RequestValidationError)

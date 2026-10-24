@@ -30,3 +30,23 @@ export async function postScan(scan) {
     clearTimeout(timer);
   }
 }
+
+export async function checkSiteReputation(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BACKEND_URL}/reputation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: controller.signal
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(`Reputation service returned HTTP ${res.status}.`);
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}

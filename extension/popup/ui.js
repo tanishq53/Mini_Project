@@ -126,6 +126,130 @@ function renderFieldTypes(fieldTypes) {
     if (shown === 0) box.append(makeRow("None detected", "", { indent: true }));
 }
 
+function renderExpandableRows(containerId, rows) {
+    const container = $(containerId);
+    container.replaceChildren();
+
+    for (const { key, label, count, items, detailsAvailable, formatItem } of rows) {
+        const row = el("div", "row detail-row");
+        row.append(el("span", "row-name", label));
+
+        const value = el("span", "row-value detail-value");
+        const missing = count === undefined || count === null;
+        const countNode = el("span", "detail-count", missing ? "\u2014" : String(count));
+        countNode.classList.toggle("zero", missing || count === 0);
+        value.append(countNode);
+
+        const detailsId = `${containerId}-${key}-details`;
+        const toggle = el("button", "detail-toggle");
+        toggle.type = "button";
+        toggle.setAttribute("aria-label", `Show ${label.toLowerCase()} details`);
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-controls", detailsId);
+        toggle.append(el("span", "detail-chevron"));
+        value.append(toggle);
+        row.append(value);
+        container.append(row);
+
+        const list = el("ul", "details-list");
+        list.id = detailsId;
+        list.hidden = true;
+
+        if (missing || !detailsAvailable || (count > 0 && !items.length)) {
+            list.append(el("li", "muted", "Details are unavailable for this scan."));
+        } else if (count === 0) {
+            list.append(el("li", "muted", "None detected."));
+        } else {
+            let shown = 0;
+            const moreButton = el("button", "details-more", "Show 10 more");
+            moreButton.type = "button";
+            const moreItem = el("li");
+            moreItem.append(moreButton);
+            list.append(moreItem);
+            const appendNextPage = () => {
+                const nextItems = items.slice(shown, shown + 10);
+                for (const item of nextItems) {
+                    const detail = el("li", "", formatItem(item));
+                    list.insertBefore(detail, moreItem);
+                    shown++;
+                }
+                moreButton.hidden = shown >= items.length;
+            };
+            appendNextPage();
+            moreButton.addEventListener("click", appendNextPage);
+        }
+        container.append(list);
+
+        toggle.addEventListener("click", () => {
+            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            toggle.setAttribute("aria-expanded", String(!expanded));
+            toggle.setAttribute("aria-label", `${expanded ? "Show" : "Hide"} ${label.toLowerCase()} details`);
+            list.hidden = expanded;
+        });
+    }
+}
+
+function renderTrackers(tracking) {
+    const counts = tracking?.trackers;
+    const trackerList = tracking?.trackerList;
+    const categories = [
+        ["analytics", "Analytics"],
+        ["advertising", "Advertising"],
+        ["social", "Social media"],
+        ["unknown", "Unrecognised third party"]
+    ];
+
+    renderExpandableRows("tracker-rows", categories.map(([key, label]) => ({
+        key,
+        label,
+        count: counts?.[key],
+        items: Array.isArray(trackerList)
+            ? trackerList.filter((tracker) => tracker.category === key && typeof tracker.domain === "string")
+            : [],
+        detailsAvailable: Array.isArray(trackerList),
+        formatItem: (tracker) => tracker.domain
+    })));
+}
+
+function renderCookies(cookies) {
+    const firstParty = cookies?.firstPartyList;
+    const thirdParty = cookies?.thirdPartyList;
+    const hasDetails = cookies?.detailsAvailable === true;
+    const firstItems = Array.isArray(firstParty) ? firstParty : [];
+    const thirdItems = Array.isArray(thirdParty) ? thirdParty : [];
+    const formatCookie = (cookie) => {
+        const name = cookie.name || "(unnamed cookie)";
+        return cookie.domain ? `${name} (${cookie.domain})` : name;
+    };
+
+    renderExpandableRows("cookie-rows", [
+        {
+            key: "total",
+            label: "Total",
+            count: cookies?.total,
+            items: [...firstItems, ...thirdItems],
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        },
+        {
+            key: "first-party",
+            label: "First-party",
+            count: cookies?.firstParty,
+            items: firstItems,
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        },
+        {
+            key: "third-party",
+            label: "Third-party",
+            count: cookies?.thirdParty,
+            items: thirdItems,
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        }
+    ]);
+}
+
 function renderPolicyLinks(policy) {
     const list = $("policy-links");
     list.replaceChildren();
@@ -214,15 +338,8 @@ export function renderReport(report) {
     renderFieldTypes(scan.scanner?.fieldTypes);
 
     // Trackers and cookies
-    const trackers = scan.tracking?.trackers;
-    setNumber("v-analytics", trackers?.analytics);
-    setNumber("v-advertising", trackers?.advertising);
-    setNumber("v-social", trackers?.social);
-    setNumber("v-unknown", trackers?.unknown);
-    const cookies = scan.tracking?.cookies;
-    setNumber("v-cookies", cookies?.total);
-    setNumber("v-cookies-first", cookies?.firstParty);
-    setNumber("v-cookies-third", cookies?.thirdParty);
+    renderTrackers(scan.tracking);
+    renderCookies(scan.tracking?.cookies);
 
     // Connection
     const https = $("v-https");
@@ -245,6 +362,59 @@ export function renderReport(report) {
     renderPolicyAnalysis(report?.policyAnalysis);
     const canAnalyze = !!(scan.policy?.found && safeUrl(scan.policy.url));
     setAnalyzeButton(report?.policyAnalysis ? "done" : canAnalyze ? "ready" : "unavailable");
+}
+
+const THREAT_LABELS = {
+    MALWARE: "Malware",
+    SOCIAL_ENGINEERING: "Phishing or deceptive content",
+    UNWANTED_SOFTWARE: "Unwanted software"
+};
+
+export function renderReputation(result) {
+    const status = $("reputation-status");
+    const message = $("reputation-message");
+    const states = {
+        checking: ["Checking", "Checking the site's domain.", "warn"],
+        not_configured: [
+            "Not configured",
+            "Add GOOGLE_SAFE_BROWSING_API_KEY to backend/.env and restart the backend to enable this check.",
+            "warn"
+        ],
+        mock: [
+            "Demo mode",
+            "Site reputation checks are not run while using mock scan data.",
+            "warn"
+        ],
+        unavailable: [
+            "Unavailable",
+            "Google Safe Browsing could not check this domain. The privacy score is unaffected.",
+            "warn"
+        ],
+        safe: [
+            "No known threats",
+            "Google Safe Browsing found no listed threats for this domain. This does not guarantee the site or its downloads are safe.",
+            "ok"
+        ],
+        unsafe: [
+            "Threat reported",
+            "",
+            "bad"
+        ]
+    };
+    const state = states[result?.status] || states.unavailable;
+    status.textContent = state[0];
+    status.className = "tag " + state[2];
+
+    if (result?.status === "unsafe") {
+        const threats = (result.threatTypes || [])
+            .map((type) => THREAT_LABELS[type])
+            .filter(Boolean);
+        message.textContent = threats.length
+            ? `Google Safe Browsing flagged this domain for: ${threats.join(", ")}. Avoid visiting or downloading from it.`
+            : "Google Safe Browsing flagged this domain. Avoid visiting or downloading from it.";
+        return;
+    }
+    message.textContent = state[1];
 }
 
 /* ---------- policy summary ---------- */

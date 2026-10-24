@@ -1,6 +1,6 @@
 // PrivacyGuard background service worker. Owner: Tanishq.
 // START_SCAN -> ask the page's content scripts -> add cookies -> POST /scan -> report.
-import { postScan } from "../utils/api.js";
+import { checkSiteReputation, postScan } from "../utils/api.js";
 import { SCAN_TIMEOUT_MS } from "../utils/config.js";
 import { removeReport, saveReport } from "../utils/storage.js";
 
@@ -53,6 +53,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "START_SCAN") {
     runScan(message.payload && message.payload.tabId).then(sendResponse);
     return true; // keep the channel open for the async reply
+  } else if (message.type === "CHECK_REPUTATION") {
+    checkSiteReputation(message.payload?.url)
+      .then(sendResponse)
+      .catch((err) => {
+        console.warn("PrivacyGuard: site reputation check failed", err);
+        sendResponse({ status: "unavailable" });
+      });
+    return true;
   }
 });
 
@@ -91,13 +99,28 @@ async function runScan(tabId) {
     tracking: {
       cookies: await countCookies(url.hostname, trackerData.tracking.trackerList || []),
       thirdPartyScripts: trackerData.tracking.thirdPartyScripts,
-      trackers: trackerData.tracking.trackers
+      trackers: trackerData.tracking.trackers,
+      trackerList: trackerData.tracking.trackerList || []
     },
     policy: trackerData.policy || ZERO_POLICY
   };
+  if (!scan.tracking.cookies.detailsAvailable) {
+    warnings.push("Cookies could not be read. Cookie counts and details are unavailable.");
+  }
 
   try {
-    const result = await postScan(scan);
+    const result = await postScan({
+      ...scan,
+      tracking: {
+        cookies: {
+          total: scan.tracking.cookies.total,
+          firstParty: scan.tracking.cookies.firstParty,
+          thirdParty: scan.tracking.cookies.thirdParty
+        },
+        thirdPartyScripts: scan.tracking.thirdPartyScripts,
+        trackers: scan.tracking.trackers
+      }
+    });
     const report = { scan, result, policyAnalysis: null, warnings };
     await saveReport(tabId, report);
     notify({ type: "REPORT_READY", payload: { tabId, report } });
@@ -141,18 +164,35 @@ const siteOf = (host) => host.replace(/^\./, "").split(".").slice(-2).join(".");
 async function countCookies(hostname, trackerList) {
   const site = siteOf(hostname);
   const key = (c) => `${c.domain}|${c.name}|${c.path}`;
+  const detail = (cookie) => ({ name: cookie.name, domain: cookie.domain });
   try {
-    const first = new Set((await chrome.cookies.getAll({ domain: site })).map(key));
-    const third = new Set();
+    const first = new Map((await chrome.cookies.getAll({ domain: site })).map((cookie) => [key(cookie), detail(cookie)]));
+    const third = new Map();
     // Cookies are usually set on the parent domain (doubleclick.net), not the script's subdomain, so look up the site.
     const domains = new Set(trackerList.map((t) => siteOf(t.domain)).filter((s) => s !== site));
     for (const d of domains) {
-      for (const c of await chrome.cookies.getAll({ domain: d })) third.add(key(c));
+      for (const cookie of await chrome.cookies.getAll({ domain: d })) {
+        third.set(key(cookie), detail(cookie));
+      }
     }
-    return { total: first.size + third.size, firstParty: first.size, thirdParty: third.size };
+    return {
+      total: first.size + third.size,
+      firstParty: first.size,
+      thirdParty: third.size,
+      firstPartyList: Array.from(first.values()),
+      thirdPartyList: Array.from(third.values()),
+      detailsAvailable: true
+    };
   } catch (err) {
     console.warn("PrivacyGuard: cookie read failed", err);
-    return { total: 0, firstParty: 0, thirdParty: 0 };
+    return {
+      total: 0,
+      firstParty: 0,
+      thirdParty: 0,
+      firstPartyList: [],
+      thirdPartyList: [],
+      detailsAvailable: false
+    };
   }
 }
 
