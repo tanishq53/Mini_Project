@@ -215,7 +215,7 @@ The score is calculated by the formula in `docs/scoring.md`. Reference implement
 
 ### 6.2 `POST /reputation`
 
-Checks the current website origin with Google Safe Browsing, independently of the privacy score. The extension sends the current page URL to the backend; the backend checks only its origin (`scheme://host[:port]/`) and does not send the page path, query, or fragment to Google.
+Checks the current page URL with Google Safe Browsing, independently of the privacy score. The backend sends the URL's origin and path to Google. Query strings and fragments are excluded to avoid sending potentially sensitive URL data.
 
 Request:
 
@@ -225,7 +225,7 @@ Request:
 
 Response status is `safe`, `unsafe`, `not_configured`, or `unavailable`. Unsafe responses include recognized `threatTypes` (`MALWARE`, `SOCIAL_ENGINEERING`, or `UNWANTED_SOFTWARE`). The backend needs `GOOGLE_SAFE_BROWSING_API_KEY` configured in its environment. It does not store reputation requests or results.
 
-This check identifies domains listed by Google as known threats; a clean result does not guarantee the site or its downloads are safe. The website origin is disclosed to Google. Follow Google's Safe Browsing API terms and usage requirements before deployment.
+This check identifies URLs listed by Google as known threats; a clean result does not guarantee the site or its downloads are safe. The checked URL's origin and path are disclosed to Google. Follow Google's Safe Browsing API terms and usage requirements before deployment.
 
 Risk levels (proposed project thresholds, not an official standard):
 

@@ -574,7 +574,6 @@ ul {
   padding: var(--sp-2) 0 var(--sp-3);
 }
 
-.reputation-note,
 .reputation-message {
   font-size: var(--fs-sm);
 }

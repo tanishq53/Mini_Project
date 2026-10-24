@@ -11,16 +11,27 @@ SAFE_BROWSING_URL = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 THREAT_TYPES = ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"]
 
 
-def _origin(url: str) -> tuple[str, str] | None:
+def _url_for_check(url: str) -> tuple[str, str] | None:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
         return None
 
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+
     hostname = parsed.hostname
-    if ":" in hostname:
-        hostname = f"[{hostname}]"
-    netloc = hostname + (f":{parsed.port}" if parsed.port else "")
-    return f"{parsed.scheme}://{netloc}/", parsed.hostname
+    netloc = f"[{hostname}]" if ":" in hostname else hostname
+    if port:
+        netloc += f":{port}"
+    checked_url = parsed._replace(
+        netloc=netloc,
+        path=parsed.path or "/",
+        query="",
+        fragment="",
+    ).geturl()
+    return checked_url, hostname
 
 
 def check_site_reputation(url: str) -> dict:
@@ -28,10 +39,10 @@ def check_site_reputation(url: str) -> dict:
     if not api_key:
         return {"status": "not_configured"}
 
-    origin = _origin(url)
-    if not origin:
+    target = _url_for_check(url)
+    if not target:
         return {"status": "unavailable"}
-    checked_url, checked_domain = origin
+    checked_url, checked_domain = target
 
     payload = {
         "client": {"clientId": "privacyguard", "clientVersion": "0.1.0"},

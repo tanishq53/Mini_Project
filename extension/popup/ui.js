@@ -374,7 +374,7 @@ export function renderReputation(result) {
     const status = $("reputation-status");
     const message = $("reputation-message");
     const states = {
-        checking: ["Checking", "Checking the site's domain.", "warn"],
+        checking: ["Checking", "Checking this page's path with Google Safe Browsing.", "warn"],
         not_configured: [
             "Not configured",
             "Add GOOGLE_SAFE_BROWSING_API_KEY to backend/.env and restart the backend to enable this check.",

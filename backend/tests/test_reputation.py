@@ -11,7 +11,7 @@ def fake_google_response(payload):
     def post(url, *, params, json, timeout):
         assert url == site_reputation.SAFE_BROWSING_URL
         assert params == {"key": "test-api-key"}
-        assert json["threatInfo"]["threatEntries"] == [{"url": "https://example.com/"}]
+        assert json["threatInfo"]["threatEntries"] == [{"url": "https://example.com/path"}]
         assert timeout == 5.0
         return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
     return post
@@ -24,7 +24,7 @@ def test_reputation_requires_no_key_to_return_not_configured(monkeypatch):
     assert response.json() == {"status": "not_configured"}
 
 
-def test_reputation_sends_only_site_origin_and_returns_safe(monkeypatch):
+def test_reputation_checks_path_without_query_or_fragment(monkeypatch):
     monkeypatch.setenv("GOOGLE_SAFE_BROWSING_API_KEY", "test-api-key")
     monkeypatch.setattr(site_reputation.httpx, "post", fake_google_response({}))
     response = client.post("/reputation", json={"url": "https://example.com/path?secret=value#fragment"})
@@ -38,14 +38,18 @@ def test_reputation_sends_only_site_origin_and_returns_safe(monkeypatch):
 
 def test_reputation_returns_threat_types(monkeypatch):
     monkeypatch.setenv("GOOGLE_SAFE_BROWSING_API_KEY", "test-api-key")
-    monkeypatch.setattr(
-        site_reputation.httpx,
-        "post",
-        fake_google_response({"matches": [
+    def post(url, *, params, json, timeout):
+        assert json["threatInfo"]["threatEntries"] == [{"url": "https://example.com/path"}]
+        return httpx.Response(200, json={"matches": [
             {"threatType": "MALWARE"},
             {"threatType": "SOCIAL_ENGINEERING"},
             {"threatType": "MALWARE"},
-        ]}),
+        ]}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(
+        site_reputation.httpx,
+        "post",
+        post,
     )
     response = client.post("/reputation", json={"url": "https://example.com/path"})
     assert response.status_code == 200
@@ -58,10 +62,17 @@ def test_reputation_returns_threat_types(monkeypatch):
 
 def test_reputation_flags_unrecognized_threat_type_as_unsafe(monkeypatch):
     monkeypatch.setenv("GOOGLE_SAFE_BROWSING_API_KEY", "test-api-key")
+    def post(url, *, params, json, timeout):
+        return httpx.Response(
+            200,
+            json={"matches": [{"threatType": "NEW_THREAT_TYPE"}]},
+            request=httpx.Request("POST", url),
+        )
+
     monkeypatch.setattr(
         site_reputation.httpx,
         "post",
-        fake_google_response({"matches": [{"threatType": "NEW_THREAT_TYPE"}]}),
+        post,
     )
     response = client.post("/reputation", json={"url": "https://example.com"})
     assert response.status_code == 200
