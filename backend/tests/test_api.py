@@ -257,3 +257,27 @@ def test_caps_never_exceed_100(client):
     s["tracking"]["cookies"] = {"total": 60, "firstParty": 0, "thirdParty": 60}
     body = client.post("/scan", json=s).json()
     assert body["riskScore"] == 100 and body["riskLevel"] == "Very High"
+
+
+def test_scan_with_cookie_and_tracker_details(client):
+    s = sample()
+    s["tracking"]["cookies"]["firstPartyList"] = [
+        {"name": "_ga", "domain": "example.com"},
+        {"name": "session", "domain": "example.com"},
+    ]
+    s["tracking"]["cookies"]["thirdPartyList"] = [
+        {"name": "IDE", "domain": "doubleclick.net"}
+    ]
+    s["tracking"]["trackerList"] = [
+        {"domain": "google-analytics.com", "category": "analytics"},
+        {"domain": "googletagmanager.com", "category": "analytics"},
+        {"domain": "segment.com", "category": "analytics"},
+        {"domain": "doubleclick.net", "category": "advertising"},
+        {"domain": "googlesyndication.com", "category": "advertising"},
+        {"domain": "connect.facebook.net", "category": "social"},
+        {"domain": "cdn-telemetry.net", "category": "unknown"},
+    ]
+    res = client.post("/scan", json=s)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["riskScore"] > 0

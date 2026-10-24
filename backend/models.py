@@ -66,10 +66,18 @@ class Scanner(StrictInput):
         return self
 
 
+class CookieDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    name: str = Field(max_length=256)
+    domain: str = Field(max_length=253)
+
+
 class Cookies(StrictInput):
     total: int = Field(ge=0, le=20000)
     firstParty: int = Field(ge=0, le=20000)
     thirdParty: int = Field(ge=0, le=20000)
+    firstPartyList: Optional[List[CookieDetail]] = Field(default=None, max_length=20000)
+    thirdPartyList: Optional[List[CookieDetail]] = Field(default=None, max_length=20000)
 
     @model_validator(mode="after")
     def check_total(self):
