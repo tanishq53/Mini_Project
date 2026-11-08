@@ -281,6 +281,7 @@ export function renderReport(report) {
     setNumber("v-cookies-third", cookies?.thirdParty);
 
     // Render tracker details
+    const trackers = scan.tracking?.trackers || {};
     const trackerList = scan.tracking?.trackerList || [];
     renderDetailList("details-analytics", trackerList.filter((t) => t.category === "analytics"), trackers?.analytics);
     renderDetailList("details-advertising", trackerList.filter((t) => t.category === "advertising"), trackers?.advertising);
@@ -288,6 +289,7 @@ export function renderReport(report) {
     renderDetailList("details-unknown", trackerList.filter((t) => t.category === "unknown"), trackers?.unknown);
 
     // Render cookie details
+    const cookies = scan.tracking?.cookies || {};
     const firstCookies = cookies?.firstPartyList || [];
     const thirdCookies = cookies?.thirdPartyList || [];
     const allCookies = [...firstCookies, ...thirdCookies];
@@ -331,6 +333,7 @@ export function renderReport(report) {
 
 /* ---------- policy summary ---------- */
 
+<<<<<<< Updated upstream
 export function renderPolicyAnalysis(analysis) {
     const section = $("policy-analysis");
     const body = $("policy-analysis-body");
@@ -360,6 +363,97 @@ export function renderPolicyAnalysis(analysis) {
         body.append(makeRow("Concerns", analysis.concerns.join(". "), { stack: true }));
     }
     section.hidden = false;
+=======
+function appendAnalysisBullets(container, analysis) {
+    const list = el("ol", "analysis-list");
+    const addBullet = (label, value) => {
+        if (typeof value !== "string" || !value.trim()) return;
+        const item = el("li", "");
+        item.append(el("strong", "analysis-label", `${label}: `), document.createTextNode(value.trim()));
+        list.append(item);
+    };
+    const addBulletGroup = (label, values) => {
+        if (!Array.isArray(values) || !values.some((value) => typeof value === "string" && value.trim())) return;
+        const item = el("li", "analysis-group");
+        item.append(el("strong", "analysis-label", `${label}:`));
+        const nested = el("ol", "analysis-sublist");
+        values.filter((value) => typeof value === "string" && value.trim())
+            .slice(0, 6)
+            .forEach((value) => nested.append(el("li", "", value.trim())));
+        item.append(nested);
+        list.append(item);
+    };
+
+    addBullet("Page type", analysis.pageType || "Not identified");
+    addBullet("Summary", analysis.summary || "No summary was returned.");
+    addBulletGroup("Key points", analysis.keyPoints);
+    addBulletGroup("Privacy signals", analysis.privacySignals);
+
+    const policy = analysis.policyDetails || {};
+    const policyPage = /privacy|terms|legal|cookie|data protection/i.test(analysis.pageType || "");
+    const sharingSpecified = ["Yes", "No"].includes(policy.dataSharing);
+    const hasPolicyDetails = [policy.dataCollected, policy.purposes, policy.concerns]
+        .some((values) => Array.isArray(values) && values.length > 0) ||
+        sharingSpecified ||
+        [policy.thirdParties, policy.retention, policy.deletion]
+            .some((value) => typeof value === "string" && value.trim() && !/^(not stated|unclear)/i.test(value.trim()));
+    if (policyPage || hasPolicyDetails) {
+        addBulletGroup("Data collected", policy.dataCollected);
+        addBulletGroup("Purposes", policy.purposes);
+        addBullet("Data sharing", policy.dataSharing || "Unclear");
+        addBullet("Third parties", policy.thirdParties || "Not stated on this page");
+        addBullet("Retention", policy.retention || "Not stated on this page");
+        addBullet("Deletion", policy.deletion || "Not stated on this page");
+        addBulletGroup("Potential concerns", policy.concerns);
+    }
+    container.append(list);
+}
+
+export function renderPolicyReports(segments) {
+    const list = $("policy-report-list");
+    const opener = $("open-policy-reports");
+    const count = $("policy-report-count");
+    list.replaceChildren();
+    const reports = Array.isArray(segments) ? segments.filter((segment) => segment?.analysis) : [];
+    opener.disabled = reports.length === 0;
+    count.textContent = reports.length
+        ? `${reports.length} report${reports.length === 1 ? "" : "s"} · expand one to read it`
+        : "Analyze this page or the linked policy pages to build a report.";
+
+    reports.forEach((segment, index) => {
+        const section = el("details", "policy-report-segment");
+        const heading = el("summary", "policy-report-summary");
+        heading.append(el("span", "policy-report-title", `${index + 1}. ${segment.title || segment.category || "Policy page"}`));
+        const helpText = segment.analysis.summary || segment.analysis.keyPoints?.[0]
+            || "Expand this section to read the analyzed points for this policy page.";
+        const help = el("span", "policy-report-help", "?");
+        help.tabIndex = 0;
+        help.setAttribute("role", "note");
+        help.setAttribute("aria-label", `Quick information: ${helpText}`);
+        const tooltip = el("span", "policy-report-tooltip", `Quick overview: ${helpText}`);
+        tooltip.setAttribute("role", "tooltip");
+        help.append(tooltip);
+        const placeTooltip = () => {
+            const iconBounds = help.getBoundingClientRect();
+            const listBounds = list.getBoundingClientRect();
+            const below = listBounds.bottom - iconBounds.bottom;
+            const above = iconBounds.top - listBounds.top;
+            help.classList.toggle("tooltip-above", below < 150 && above > below);
+        };
+        help.addEventListener("pointerenter", placeTooltip);
+        help.addEventListener("focus", placeTooltip);
+        heading.append(help);
+        section.append(heading);
+        appendAnalysisBullets(section, segment.analysis);
+        section.addEventListener("toggle", () => {
+            if (!section.open) return;
+            for (const other of list.querySelectorAll(".policy-report-segment[open]")) {
+                if (other !== section) other.open = false;
+            }
+        });
+        list.append(section);
+    });
+>>>>>>> Stashed changes
 }
 
 // mode: "ready" | "loading" | "done" | "unavailable"

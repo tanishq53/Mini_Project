@@ -495,6 +495,229 @@ ul {
   padding: var(--sp-2) 0 var(--sp-3);
 }
 
+<<<<<<< Updated upstream
+=======
+.reputation-message {
+  font-size: var(--fs-sm);
+}
+
+.reputation-message {
+  padding-top: var(--sp-2);
+}
+.policy-action-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--sp-2);
+}
+.policy-action-row .btn {
+  flex: 0 1 auto;
+  font-size: var(--fs-sm);
+  min-width: 0;
+  padding: 8px var(--sp-3);
+}
+.policy-report-dialog {
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  color: var(--ink);
+  display: none;
+  flex-direction: column;
+  inset: 0;
+  margin: auto;
+  max-height: min(86vh, 760px);
+  max-width: 680px;
+  padding: 0;
+  width: calc(100vw - 28px);
+}
+.policy-report-dialog[open] {
+  display: flex;
+}
+.policy-report-dialog::backdrop {
+  background: rgb(4 10 8 / 62%);
+}
+.dialog-heading {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--hair);
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+.dialog-heading h2 {
+  font-size: var(--fs-lg);
+  margin: 0 0 var(--sp-1);
+}
+.dialog-heading p {
+  font-size: var(--fs-xs);
+}
+.dialog-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--sp-4) var(--sp-4);
+  scrollbar-color: var(--muted) var(--paper);
+  scrollbar-width: thin;
+}
+.policy-report-segment {
+  border-bottom: 1px solid var(--hair);
+  padding: var(--sp-3) 0;
+}
+.policy-report-segment:last-child {
+  border-bottom: 0;
+}
+.policy-report-overview {
+  border-bottom: 2px solid var(--ink);
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+.policy-report-overview h3 {
+  font-size: var(--fs-md);
+  margin: 0 0 var(--sp-2);
+}
+.policy-overview-points {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 20px;
+}
+.policy-overview-points li + li { margin-top: var(--sp-2); }
+.policy-report-summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  line-height: 1.35;
+  list-style: none;
+  overflow-wrap: anywhere;
+  user-select: none;
+}
+.policy-report-title {
+  min-width: 0;
+}
+.policy-report-help {
+  align-items: center;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: help;
+  display: inline-flex;
+  flex: 0 0 17px;
+  font-size: 11px;
+  font-weight: 700;
+  height: 17px;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  position: relative;
+  user-select: none;
+  width: 17px;
+}
+.policy-report-help:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.policy-report-tooltip {
+  background: var(--ink);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  top: calc(100% + 8px);
+  color: var(--paper);
+  display: none;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1.45;
+  padding: var(--sp-2) var(--sp-3);
+  position: absolute;
+  right: -10px;
+  user-select: text;
+  white-space: normal;
+  width: min(240px, 65vw);
+  z-index: 5;
+}
+.policy-report-help.tooltip-above .policy-report-tooltip {
+  bottom: calc(100% + 8px);
+  top: auto;
+}
+.policy-report-help:hover .policy-report-tooltip,
+.policy-report-help:focus .policy-report-tooltip,
+.policy-report-help:focus-within .policy-report-tooltip {
+  display: block;
+}
+.policy-report-summary::-webkit-details-marker {
+  display: none;
+}
+.policy-report-summary::after {
+  border-bottom: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  content: "";
+  flex: 0 0 7px;
+  height: 7px;
+  margin: 0 3px 4px var(--sp-2);
+  transform: rotate(45deg);
+  transition: transform 140ms ease-out;
+  width: 7px;
+}
+.policy-report-segment[open] > .policy-report-summary::after {
+  margin-bottom: -3px;
+  transform: rotate(225deg);
+}
+.policy-report-summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.policy-report-segment .analysis-list {
+  margin-top: var(--sp-3);
+}
+.analysis-report {
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.analysis-report summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  list-style: none;
+  padding: var(--sp-3) var(--sp-4);
+  user-select: none;
+}
+.analysis-report summary::-webkit-details-marker {
+  display: none;
+}
+.analysis-report summary::after {
+  content: "+";
+  float: right;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.analysis-report[open] summary::after {
+  content: "−";
+}
+.analysis-report summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.analysis-list {
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-3) 34px;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.analysis-list > li {
+  padding: 2px 0;
+}
+.analysis-label {
+  font-weight: 700;
+}
+.analysis-sublist {
+  margin: 2px 0 3px;
+  padding-left: 20px;
+}
+>>>>>>> Stashed changes
 /* ---------- 8. Expandable dropdown rows ---------- */
 .expandable-row {
   border-bottom: 1px solid var(--hair);

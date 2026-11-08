@@ -117,6 +117,259 @@ async function analyzePolicy() {
     }
 }
 
+<<<<<<< Updated upstream
+=======
+function policyPageText(html) {
+    const documentPage = new DOMParser().parseFromString(html, "text/html");
+    documentPage.querySelectorAll("script,style,noscript,template,svg,canvas,iframe,form,input,textarea,select,button,nav,header,footer,[hidden],[aria-hidden='true'],[contenteditable]")
+        .forEach((node) => node.remove());
+    return (documentPage.body?.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function isPublicPolicyUrl(candidate) {
+    const pageUrl = new URL(candidate.href);
+    if (!["http:", "https:"].includes(pageUrl.protocol)) throw new Error("Only public web pages can be read.");
+    if (pageUrl.username || pageUrl.password || pageUrl.hostname.startsWith("[") || /^(localhost|.*\.local|.*\.localhost)$/i.test(pageUrl.hostname) ||
+        /^(127\.|10\.|192\.168\.|169\.254\.|0\.|::1$|fc|fd)/i.test(pageUrl.hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(pageUrl.hostname)) {
+        throw new Error("This link does not point to a public website.");
+    }
+    return pageUrl;
+}
+
+async function fetchPolicyHtml(candidate) {
+    const pageUrl = isPublicPolicyUrl(candidate);
+    pageUrl.search = "";
+    pageUrl.hash = "";
+    const cacheKey = pageUrl.href;
+    if (policyHtmlCache.has(cacheKey)) return policyHtmlCache.get(cacheKey);
+    const controller = new AbortController();
+    const timerId = setTimeout(() => controller.abort(), 12000);
+    try {
+        const response = await fetch(pageUrl.href, {
+            credentials: "omit",
+            referrerPolicy: "no-referrer",
+            redirect: "error",
+            signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`Page returned HTTP ${response.status}.`);
+        const contentType = response.headers.get("content-type") || "";
+        if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) throw new Error("This link did not return a readable HTML page.");
+        const declaredSize = Number(response.headers.get("content-length") || 0);
+        if (declaredSize > 2_000_000) throw new Error("This policy page is too large to read safely.");
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("The policy page could not be read.");
+        const chunks = [];
+        let size = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > 2_000_000) {
+                await reader.cancel();
+                throw new Error("This policy page is too large to read safely.");
+            }
+            chunks.push(value);
+        }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        const html = new TextDecoder().decode(bytes);
+        if (policyHtmlCache.size >= 10) policyHtmlCache.delete(policyHtmlCache.keys().next().value);
+        policyHtmlCache.set(cacheKey, html);
+        return html;
+    } finally {
+        clearTimeout(timerId);
+    }
+}
+
+async function readPolicyPage(candidate) {
+    try {
+        const text = policyPageText(await fetchPolicyHtml(candidate));
+        if (text.length < 30) throw new Error("This policy page has too little readable text.");
+        return text;
+    } catch (error) {
+        if (error?.name === "AbortError") {
+            throw new Error("This policy page took too long to load. Open it in a tab and try Analyze this page.");
+        }
+        if (error instanceof TypeError || /failed to fetch|redirect/i.test(error?.message || "")) {
+            throw new Error("This site blocked the extension from reading this link. Open the policy page in a tab, then use Analyze this page.");
+        }
+        throw error;
+    }
+}
+
+function findPolicyLinks(html, baseUrl) {
+    // The linked site is untrusted input. Remove inline handlers before parsing
+    // so they cannot run and do not generate extension CSP violations.
+    const inertHtml = html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
+        .replace(/\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+        .replace(/\s+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+    const parsed = new DOMParser().parseFromString(inertHtml, "text/html");
+    parsed.querySelectorAll("script,style,noscript,template,svg,[hidden],[aria-hidden='true']").forEach((node) => node.remove());
+    const matches = [];
+    const seen = new Set();
+    const policyPattern = /privacy|cookie|\bpolicy\b|data protection|data processing|data retention|data policy|personal data|data use|information practices|do not sell|privacy choices|terms(?:\s+(?:and|&)\s+conditions)?|terms of service|user agreement|acceptable use|community guidelines|security policy|responsible disclosure|legal notice|disclaimer|copyright|refund|return policy|shipping policy|accessibility statement/i;
+    for (const anchor of parsed.querySelectorAll("a[href]")) {
+        const label = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+        const rawHref = anchor.getAttribute("href") || "";
+        if (/^[#?]/.test(rawHref.trim())) continue;
+        let url;
+        try { url = new URL(rawHref, baseUrl); } catch { continue; }
+        if (!["http:", "https:"].includes(url.protocol) || !policyPattern.test(`${label} ${url.pathname}`)) continue;
+        const key = `${url.origin.replace(/^https?:\/\/www\./i, "https://")}${url.pathname.replace(/\/+$/, "").toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        matches.push({ text: label || "Policy page", href: url.href });
+    }
+    return matches;
+}
+
+async function discoverRelatedPolicyLinks(targetReport) {
+    const pageUrl = targetReport?.scan?.url;
+    applyPolicyCatalog(targetReport);
+    if (!pageUrl) return;
+    const key = siteKey(pageUrl);
+    if (!key || policyDiscoveryDone.has(key)) return;
+    policyDiscoveryDone.add(key);
+
+    let candidates = getPolicyCandidates(targetReport?.scan?.policy);
+    // Inner pages (login, product, search, etc.) often have no policy links.
+    // In that case, look at the site's own homepage once for its policy index.
+    // The links are still fetched and verified below before being shown.
+    if (!candidates.length) {
+        const pageOrigin = new URL(pageUrl).origin;
+        const pageHost = new URL(pageOrigin).hostname;
+        const alternateHost = pageHost.startsWith("www.") ? pageHost.slice(4) : `www.${pageHost}`;
+        const homepageOrigins = [
+            pageOrigin,
+            `${new URL(pageOrigin).protocol}//${alternateHost}`
+        ];
+        for (const homepage of homepageOrigins) {
+            try {
+                const html = await fetchPolicyHtml({ href: homepage });
+                candidates = getPolicyCandidates({ candidates: findPolicyLinks(html, homepage) });
+                if (candidates.length) break;
+            } catch {
+                // Some sites redirect between www and the bare domain. Since
+                // redirects are intentionally refused, try that host directly.
+            }
+        }
+    }
+    if (!candidates.length) return;
+
+    const analyzeButton = $("btn-analyze-policies");
+    analyzeButton.disabled = true;
+    analyzeButton.textContent = "Finding policies…";
+    $("policy-hint").textContent = `Found ${candidates.length} policy links. Looking for related policies…`;
+
+    // Verify each linked page and follow one level to discover additional
+    // policies. Pages that cannot be loaded or have no readable text are omitted.
+    const directPages = await Promise.all(candidates.map(async (candidate) => {
+        try {
+            const html = await fetchPolicyHtml(candidate);
+            if (policyPageText(html).length < 30) return null;
+            return { candidate, html };
+        } catch {
+            return null;
+        }
+    }));
+    const readableDirectPages = directPages.filter(Boolean);
+    const relatedLinks = readableDirectPages.flatMap(({ candidate, html }) => findPolicyLinks(html, candidate.href));
+    const directHrefs = new Set(readableDirectPages.map(({ candidate }) => candidate.href));
+    const relatedCandidates = getPolicyCandidates({ candidates: relatedLinks })
+        .filter((candidate) => !directHrefs.has(candidate.href));
+    const relatedPages = await Promise.all(relatedCandidates.map(async (candidate) => {
+        try {
+            const html = await fetchPolicyHtml(candidate);
+            return policyPageText(html).length >= 30 ? candidate : null;
+        } catch {
+            return null;
+        }
+    }));
+    const catalog = policyCatalogs.get(key);
+    if (!catalog) return;
+    const kept = [...readableDirectPages.map(({ candidate }) => candidate), ...relatedPages.filter(Boolean)];
+    catalog.candidates = kept.map((candidate) => ({ text: candidate.category, href: candidate.href }));
+    catalog.found = kept.some((candidate) => candidate.category === "Privacy policy");
+    catalog.url = kept.find((candidate) => candidate.category === "Privacy policy")?.href || null;
+    if (report && siteKey(report.scan?.url) === key) {
+        report.scan.policy = catalog;
+        renderReport(report);
+    }
+}
+
+async function analyzeDetectedPolicies() {
+    if (busy || !report || !tab?.url) return;
+    const candidates = getPolicyCandidates(report.scan?.policy).slice(0, 12);
+    if (!candidates.length) return;
+    busy = true;
+    const button = $("btn-analyze-policies");
+    button.disabled = true;
+    button.textContent = "Reading policies…";
+    const segments = [];
+    try {
+        const pages = await Promise.all(candidates.map(async (candidate) => {
+            try {
+                return { candidate, pageText: await readPolicyPage(candidate) };
+            } catch (error) {
+                return { candidate, error: error?.message || "Could not read this policy page." };
+            }
+        }));
+        const readable = pages.filter((page) => page.pageText);
+        if (readable.length) {
+            button.textContent = "Analyzing policies…";
+            const textBudget = 30000;
+            const perPageLimit = Math.floor(textBudget / readable.length);
+            const documents = readable.map((page) => ({
+                label: page.candidate.category,
+                pageText: page.pageText.slice(0, perPageLimit)
+            }));
+            const origin = new URL(tab.url).origin;
+            let analyses = [];
+            try {
+                const result = await source.analyzePolicies(origin, documents);
+                analyses = Array.isArray(result?.reports) ? result.reports : [];
+            } catch (error) {
+                const { title, message } = errorCopy(toError(error).code, toError(error).message);
+                analyzedSegments = analyzedSegments.filter((segment) => segment.category === "Current page");
+                renderPolicyReports(analyzedSegments);
+                renderWarnings(report.warnings);
+                addWarning(`${title}. ${message}`);
+                button.textContent = "Analysis unavailable";
+                return;
+            }
+            readable.forEach((page, index) => {
+                const analysis = analyses[index];
+                if (analysis) segments.push({
+                    href: page.candidate.href,
+                    title: page.candidate.displayTitle,
+                    category: page.candidate.category,
+                    analysis
+                });
+            });
+            // Show only successfully fetched and analyzed policies, in link order.
+            analyzedSegments = [...segments, ...analyzedSegments.filter((segment) => segment.category === "Current page")];
+            renderPolicyReports(analyzedSegments);
+            button.textContent = "Policies analyzed";
+        } else {
+            analyzedSegments = analyzedSegments.filter((segment) => segment.category === "Current page");
+            renderPolicyReports(analyzedSegments);
+            button.textContent = "No readable policies";
+        }
+    } catch (err) {
+        const { title, message } = errorCopy(toError(err).code, toError(err).message);
+        renderWarnings(report.warnings);
+        addWarning(`${title}. ${message}`);
+        button.textContent = "Try analyzing policies again";
+    } finally {
+        busy = false;
+        button.disabled = getPolicyCandidates(report?.scan?.policy).length === 0;
+    }
+}
+
+>>>>>>> Stashed changes
 /* ---------- wiring ---------- */
 
 $("btn-scan").addEventListener("click", startScan);
