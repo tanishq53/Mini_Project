@@ -4,8 +4,9 @@
 
 import { USE_MOCK } from "../utils/config.js";
 import {
-    showState, setScanningSite, renderReport, renderPolicyAnalysis,
-    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy, applyPhaseSwitch, initExpandableRows
+    showState, setScanningSite, renderReport, renderPolicyReports, getPolicyCandidates,
+    renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy,
+    applyPhaseSwitch, renderReputation, initExpandableRows
 } from "./ui.js";
 import { source } from "./source.js";
 import { mountDevPicker } from "./devPicker.js";
@@ -18,6 +19,12 @@ let tab = null;      // the tab being scanned
 let busy = false;    // true while a scan or analysis is running
 let rescanQueued = false; // the page changed while a scan was running
 let timer = null;    // debounce for automatic scans
+let reputationRequestId = 0;
+let analyzedSegments = [];
+let reportOrigin = "";
+const policyCatalogs = new Map();
+const policyDiscoveryDone = new Set();
+const policyHtmlCache = new Map();
 
 /* ---------- helpers ---------- */
 
@@ -37,6 +44,23 @@ function hostOf(url) {
     try { return new URL(url).hostname; } catch { return ""; }
 }
 
+function siteKey(url) {
+    try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+        return `${parsed.protocol}//${hostname}`;
+    } catch { return ""; }
+}
+
+function applyPolicyCatalog(targetReport) {
+    const key = siteKey(targetReport?.scan?.url);
+    if (!key) return;
+    if (!policyCatalogs.has(key)) {
+        policyCatalogs.set(key, { ...(targetReport.scan.policy || {}), candidates: [...(targetReport.scan.policy?.candidates || [])] });
+    }
+    targetReport.scan.policy = policyCatalogs.get(key);
+}
+
 // Pages where Chrome does not allow extensions to run.
 function isRestricted(url) {
     return !url || !/^https?:/.test(url) ||
@@ -44,11 +68,54 @@ function isRestricted(url) {
         url.startsWith("https://chrome.google.com/webstore");
 }
 
+// Search results pages are not the destination site the user is trying to inspect.
+// Their footer and result snippets contain unrelated links that resemble policies.
+function isSearchResultsPage(url) {
+    try {
+        const page = new URL(url);
+        const host = page.hostname.toLowerCase().replace(/^www\./, "");
+        const path = page.pathname.toLowerCase();
+        const hasSearchQuery = ["q", "query", "text", "p"].some((key) => page.searchParams.has(key));
+        if (/^google\.[a-z.]+$/.test(host)) return path === "/search" || hasSearchQuery;
+        if (host === "bing.com") return path === "/search";
+        if (host === "search.yahoo.com") return path.startsWith("/search");
+        if (host === "duckduckgo.com") return path === "/" && hasSearchQuery;
+        if (host === "search.brave.com") return path.startsWith("/search");
+        if (host === "ecosia.org") return path.startsWith("/search") || hasSearchQuery;
+        if (host === "qwant.com") return path.startsWith("/search") || hasSearchQuery;
+        if (/^yandex\.[a-z.]+$/.test(host)) return path === "/search";
+    } catch { /* Non-URL tabs are handled by isRestricted. */ }
+    return false;
+}
+
+function setPolicyDiscoveryVisible(visible) {
+    const section = document.querySelector(".policy-discovery");
+    if (section) section.hidden = !visible;
+}
+
 function toError(err) {
     return err?.code ? err : { error: true, code: "UNKNOWN", message: err?.message };
 }
 
 const smooth = () => (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+
+async function checkReputation(targetReport, targetTabId) {
+    const requestId = ++reputationRequestId;
+    renderReputation({ status: "checking" });
+    try {
+        const result = await chrome.runtime.sendMessage({
+            type: "CHECK_REPUTATION",
+            payload: { url: targetReport.scan.url }
+        });
+        if (requestId !== reputationRequestId || report !== targetReport || tab?.id !== targetTabId) return;
+        renderReputation(result);
+    } catch (err) {
+        console.warn("PrivacyGuard: could not display site reputation", err);
+        if (requestId === reputationRequestId && report === targetReport && tab?.id === targetTabId) {
+            renderReputation({ status: "unavailable" });
+        }
+    }
+}
 
 /* ---------- actions ---------- */
 
@@ -64,6 +131,13 @@ async function startScan() {
     busy = true;
     try {
         tab = await getActiveTab();
+        setPolicyDiscoveryVisible(!isSearchResultsPage(tab?.url || ""));
+        const nextOrigin = siteKey(tab?.url || "");
+        if (nextOrigin !== reportOrigin) {
+            reportOrigin = nextOrigin;
+            analyzedSegments = [];
+            renderPolicyReports(analyzedSegments);
+        }
         setScanningSite(hostOf(tab?.url));
         showState("scanning");
 
@@ -72,8 +146,10 @@ async function startScan() {
             const cached = await getReport(tab.id);
             if (cached) {
                 report = cached;
+                applyPolicyCatalog(cached);
                 renderReport(cached);
                 showState("result");
+                checkReputation(cached, tab.id);
             }
         }
 
@@ -82,8 +158,14 @@ async function startScan() {
         }
 
         report = USE_MOCK ? await source.scan(tab?.id) : await scanReal(tab?.id);
+        applyPolicyCatalog(report);
         renderReport(report);
         showState("result");
+        const searchResults = isSearchResultsPage(report?.scan?.url || tab?.url || "");
+        setPolicyDiscoveryVisible(!searchResults);
+        if (!USE_MOCK && !searchResults) discoverRelatedPolicyLinks(report);
+        if (!USE_MOCK && tab?.id != null) checkReputation(report, tab.id);
+        else renderReputation({ status: "mock" });
         window.scrollTo(0, 0);
     } catch (err) {
         report = null;
@@ -96,16 +178,20 @@ async function startScan() {
 }
 
 async function analyzePolicy() {
-    if (busy || !report?.scan?.policy?.found) return;
+    if (busy || !report || tab?.id == null) return;
     busy = true;
     setAnalyzeButton("loading");
     try {
-        const analysis = await source.analyze(tab?.id, report.scan.policy.url);
+        const analysis = await source.analyze(tab.id);
         report.policyAnalysis = analysis;
+        const currentPage = analyzedSegments.findIndex((segment) => segment.category === "Current page");
+        const currentSegment = { title: "Current page", category: "Current page", analysis };
+        if (currentPage >= 0) analyzedSegments[currentPage] = currentSegment;
+        else analyzedSegments.push(currentSegment);
+        renderPolicyReports(analyzedSegments);
         renderWarnings(report.warnings);
-        renderPolicyAnalysis(analysis);
         setAnalyzeButton("done");
-        $("policy-analysis").scrollIntoView({ behavior: smooth(), block: "start" });
+        $("open-policy-reports").focus();
     } catch (err) {
         // The score is still valid, so a failed analysis is a warning, not a full error screen.
         const { title, message } = errorCopy(toError(err).code, toError(err).message);
@@ -117,8 +203,6 @@ async function analyzePolicy() {
     }
 }
 
-<<<<<<< Updated upstream
-=======
 function policyPageText(html) {
     const documentPage = new DOMParser().parseFromString(html, "text/html");
     documentPage.querySelectorAll("script,style,noscript,template,svg,canvas,iframe,form,input,textarea,select,button,nav,header,footer,[hidden],[aria-hidden='true'],[contenteditable]")
@@ -369,13 +453,18 @@ async function analyzeDetectedPolicies() {
     }
 }
 
->>>>>>> Stashed changes
 /* ---------- wiring ---------- */
 
 $("btn-scan").addEventListener("click", startScan);
 $("btn-rescan").addEventListener("click", startScan);
 $("btn-retry").addEventListener("click", startScan);
 $("btn-analyze").addEventListener("click", analyzePolicy);
+$("btn-analyze-policies").addEventListener("click", analyzeDetectedPolicies);
+$("open-policy-reports").addEventListener("click", () => {
+    const dialog = $("policy-report-dialog");
+    if (!dialog.open && !$("open-policy-reports").disabled) dialog.showModal();
+});
+$("close-policy-reports").addEventListener("click", () => $("policy-report-dialog").close());
 
 applyPhaseSwitch();
 initExpandableRows();
@@ -395,8 +484,13 @@ if (!USE_MOCK) {
     chrome.runtime.onMessage.addListener((message) => {
         if (message.type !== "REPORT_READY" || message.payload?.tabId !== tab?.id || busy) return;
         report = message.payload.report;
+        applyPolicyCatalog(report);
         renderReport(report);
         showState("result");
+        const searchResults = isSearchResultsPage(report?.scan?.url || tab?.url || "");
+        setPolicyDiscoveryVisible(!searchResults);
+        if (!searchResults) discoverRelatedPolicyLinks(report);
+        if (tab?.id != null) checkReputation(report, tab.id);
     });
     startScan();
 } else {
