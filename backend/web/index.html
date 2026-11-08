@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f4ef">
+  <title>PrivacyGuard — Your browsing, understood</title>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem("privacyguard-theme")||"light"}catch{document.documentElement.dataset.theme="light"}</script>
+  <link rel="stylesheet" href="/web/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="PrivacyGuard home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.7 27 7v7.4c0 7.2-4.4 12.3-11 15.2C9.4 26.7 5 21.6 5 14.4V7l11-4.3Z"/><path d="m11.2 15.8 3.2 3.1 6.6-7"/></svg>
+      <span>Privacy<span class="brand-light">Guard</span></span>
+    </a>
+    <div class="header-controls">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch to dark theme"><span class="theme-icon" aria-hidden="true">☾</span><span id="theme-label">Dark mode</span></button>
+      <nav class="top-actions" id="signed-in-nav" hidden>
+        <span class="account-email" id="account-email"></span>
+        <button class="quiet-button" id="logout-button" type="button">Sign out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="auth-shell" id="auth-view" hidden>
+      <div class="auth-copy">
+        <p class="overline">A clearer view of your browsing</p>
+        <h1>Your browsing,<br><em>understood.</em></h1>
+        <p>See the sites you scan over time, and what their privacy checks found. Your history is stored in your Firebase project and shown only in your account.</p>
+        <div class="privacy-note"><span class="note-mark" aria-hidden="true">✓</span><span>Only a site’s domain, visit time and scan summary are saved. Page paths, form contents and cookie values are never added to this history.</span></div>
+      </div>
+      <section class="auth-panel" aria-labelledby="auth-heading">
+        <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <button class="auth-tab active" type="button" role="tab" aria-selected="true" data-auth-mode="login">Sign in</button>
+          <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-mode="register">Create account</button>
+        </div>
+        <form id="auth-form">
+          <h2 id="auth-heading">Welcome back</h2>
+          <p class="form-intro" id="auth-intro">Sign in to view your scan history.</p>
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" minlength="10" maxlength="256" required>
+          <p class="form-error" id="auth-error" role="alert" hidden></p>
+          <button class="primary-button full-button" id="auth-submit" type="submit">Sign in</button>
+          <p class="fine-print">Passwords are stored as salted hashes. PrivacyGuard never sees or stores what you type into websites.</p>
+        </form>
+      </section>
+    </section>
+
+    <section class="dashboard" id="dashboard-view" hidden>
+      <div class="page-heading">
+        <div>
+          <p class="overline">Your private activity log</p>
+          <h1>Browsing history</h1>
+          <p class="lede">A record of sites PrivacyGuard scanned while its panel was open and connected.</p>
+        </div>
+        <div class="period-controls">
+          <div class="period-switch" role="group" aria-label="History period">
+            <button type="button" data-period="day">Day</button>
+            <button type="button" data-period="week" class="selected" aria-pressed="true">Week</button>
+            <button type="button" data-period="month">Month</button>
+          </div>
+          <button class="secondary-button download-button" id="download-report" type="button" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3 13v3.5h14V13" /></svg>
+            Download PDF
+          </button>
+          <button class="quiet-button" id="download-csv" type="button" disabled>Download CSV</button>
+          <p class="sync-status" id="history-sync-status" role="status">Loading history…</p>
+        </div>
+      </div>
+
+      <section class="summary-strip" aria-label="Activity summary">
+        <div><span class="summary-label">Scans</span><strong id="total-visits">0</strong><span class="summary-caption" id="period-caption">in the past 7 days</span></div>
+        <div><span class="summary-label">Sites scanned</span><strong id="unique-sites">0</strong><span class="summary-caption">unique domains</span></div>
+        <div class="summary-action"><span class="summary-label">History collection</span><strong id="connection-state">Not connected</strong><button class="text-button" id="connect-open" type="button">Connect extension <span aria-hidden="true">→</span></button></div>
+      </section>
+
+      <details class="score-guide">
+        <summary>How to read the privacy exposure score</summary>
+        <p>The score reflects detected personal-data fields, trackers and third-party cookies, and connection security. Lower scores mean fewer measured exposure signals; they do not guarantee a site is safe or trustworthy.</p>
+        <ul><li>0–25: Low</li><li>26–50: Moderate</li><li>51–75: High</li><li>76–100: Very high</li></ul>
+      </details>
+
+      <section class="history-section">
+        <div class="section-heading"><div><h2>Activity over time</h2><p class="muted" id="chart-description">Daily scan count</p></div></div>
+        <div class="activity-chart" id="activity-chart" role="img" aria-label="Daily website scan activity"></div>
+      </section>
+
+      <div class="lower-grid">
+        <section class="history-section site-section">
+          <div class="section-heading"><div><h2>Most scanned</h2><p class="muted">Domains with the most scans in this period</p></div></div>
+          <div class="history-filters">
+            <label>Filter sites <input id="site-filter" type="search" placeholder="Search a domain" autocomplete="off"></label>
+            <label>Exposure <select id="exposure-filter"><option value="all">All levels</option><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option><option value="very-high">Very high</option></select></label>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Website</th><th>Scans</th><th>Score range</th><th>Why it scored</th></tr></thead><tbody id="top-sites"></tbody></table></div>
+          <p class="empty-state" id="sites-empty" hidden>No scans in this period yet.</p>
+        </section>
+        <section class="history-section recent-section">
+          <div class="section-heading"><div><h2>Sites scanned</h2><p class="muted">One summary per site in this period</p></div></div>
+          <ol class="recent-list" id="recent-visits"></ol>
+          <p class="empty-state" id="recent-empty" hidden>When the extension is connected, scans will appear here.</p>
+        </section>
+      </div>
+
+      <section class="connect-panel" id="connect-panel" hidden>
+        <div class="connect-copy"><h2>Connect the extension</h2><p>Link your account to PrivacyGuard in Chrome. Only then will new scan summaries appear in this dashboard.</p></div>
+        <div class="connect-action" id="connect-action">
+          <button class="primary-button" id="create-key" type="button">Create connection key</button>
+          <p class="fine-print">The key lets this browser add scan summaries to your account. You can disable it at any time.</p>
+        </div>
+        <div class="key-result" id="key-result" hidden>
+          <label for="extension-key">Copy this key into the extension settings</label>
+          <div class="key-line"><input id="extension-key" readonly><button class="secondary-button" id="copy-key" type="button">Copy</button></div>
+          <p class="fine-print">It is shown once. If you lose it, create a new key; the old one stops working.</p>
+          <button class="text-button" id="key-done" type="button">Done</button>
+        </div>
+        <button class="text-button revoke-button" id="revoke-key" type="button" hidden>Disconnect extension</button>
+      </section>
+
+      <section class="privacy-footer">
+        <div><h2>Your data, under your control</h2><p>History is stored in Firebase Firestore: domains, scan times and risk summaries only. It excludes page paths and page contents. You can disconnect the extension or erase the records here.</p></div>
+        <div class="privacy-actions">
+          <label for="history-retention">Keep history for</label>
+          <select id="history-retention"><option value="7">7 days</option><option value="30" selected>30 days</option></select>
+          <button class="danger-button" id="clear-history" type="button">Clear my history</button>
+        </div>
+      </section>
+      <p class="page-message" id="dashboard-message" role="status" hidden></p>
+    </section>
+  </main>
+  <footer class="site-footer"><span>PrivacyGuard</span><span>Read-only scans. Your browsing data stays yours.</span></footer>
+  <script type="module" src="/web/app.js?v=dashboard-refinements-20261108"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// PrivacyGuard reads and writes Firestore only from its trusted FastAPI backend
+// using the Firebase Admin SDK. Browser clients use Firebase Authentication,
+// then send ID tokens to the backend; they never access these documents directly.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

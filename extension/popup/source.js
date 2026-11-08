@@ -6,6 +6,7 @@
 import { USE_MOCK } from "../utils/config.js";
 import { MSG } from "../utils/messages.js";
 import { getScenario, getError, MOCK_POLICY_ANALYSIS } from "../mockData.js";
+import { analyzePolicyDocuments } from "../utils/api.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const fail = (code, message) => ({ error: true, code, message });
@@ -34,6 +35,11 @@ const mockSource = {
         await wait(1200);
         if (mock.analyzeFails) throw getError("geminiFailed");
         return structuredClone(MOCK_POLICY_ANALYSIS);
+    },
+    async analyzePolicies(_origin, documents) {
+        await wait(1200);
+        if (mock.analyzeFails) throw getError("geminiFailed");
+        return { reports: documents.map(() => structuredClone(MOCK_POLICY_ANALYSIS)) };
     }
 };
 
@@ -57,9 +63,10 @@ const realSource = {
     scan: (tabId) =>
         withTimeout(ask({ type: MSG.START_SCAN, payload: { tabId } }), 30000,
             "SCAN_TIMEOUT", "The scan did not finish in time."),
-    analyze: (tabId, policyUrl) =>
-        withTimeout(ask({ type: MSG.ANALYZE_POLICY, payload: { tabId, policyUrl } }), 60000,
-            "GEMINI_FAILED", "The policy analysis did not finish in time.")
+    analyze: (tabId) =>
+        withTimeout(ask({ type: MSG.ANALYZE_POLICY, payload: { tabId } }), 55000,
+            "GEMINI_FAILED", "The page analysis did not finish in time."),
+    analyzePolicies: (origin, documents) => analyzePolicyDocuments(origin, documents)
 };
 
 export const source = USE_MOCK ? mockSource : realSource;

@@ -24,11 +24,11 @@ Points per detected field: name 1, email 2, password 2, phone 3, address 4, dob 
 **Context rule.** Typed data is only really exposed when other parties can see it. Points count in full when
 any of these is true:
 
-- the page is explicitly not HTTPS (`https: false`),
+- the page is explicitly not HTTPS (`https: false`) or the backend reports an insecure/broken TLS connection,
 - at least one known tracker (analytics, advertising or social) is present,
 - at least one third-party cookie is present.
 
-Otherwise (a clean HTTPS page) the points count at half, rounded up, so one detected field still adds 1.
+Otherwise (a page with a secure HTTPS connection) the points count at half, rounded up, so one detected field still adds 1. Missing TLS data alone is not treated as a problem.
 Unknown third-party scripts do not remove the discount, because not every third-party script is a tracker
 (fonts and CDNs are not). A missing `https` value is treated as secure.
 Apply the discount to the weighted field points first, then cap the personal-data component at 25.
@@ -48,8 +48,8 @@ A site's own domains (for example amazon.com and media-amazon.com) are not count
 
 ## Security (max 20)
 
-- Page is not HTTPS: 12.
-- Not HTTPS and the page has a password, financial or governmentId field: 8 more.
+- Page uses HTTP, or the backend reports an insecure/broken TLS connection: 12.
+- An insecure connection and the page has a password, financial or governmentId field: 8 more.
 
 ## Levels (proposed thresholds, not an official standard)
 
@@ -71,4 +71,4 @@ The API values stay "Low", "Moderate", "High" and "Very High".
 
 - Password or sensitive fields over HTTP with nothing else wrong score 22 (Low) when only a password
   field is present. The panel still shows the "Do not enter passwords here" recommendation. Open decision.
-- The model does not read the privacy policy. That is Phase 2.
+- Page and policy text are analyzed separately on user request in Phase 2. That narrative does not change the deterministic score.

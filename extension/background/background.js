@@ -1,6 +1,6 @@
 // PrivacyGuard background service worker. Owner: Tanishq.
 // START_SCAN -> ask the page's content scripts -> add cookies -> POST /scan -> report.
-import { postScan } from "../utils/api.js";
+import { analyzePageContent, checkSiteReputation, postScan } from "../utils/api.js";
 import { SCAN_TIMEOUT_MS } from "../utils/config.js";
 import { removeReport, saveReport } from "../utils/storage.js";
 
@@ -43,6 +43,14 @@ chrome.webNavigation.onReferenceFragmentUpdated.addListener(({ tabId, frameId })
   if (frameId === 0) scheduleScan(tabId);
 });
 
+// Scan each regular top-level page once it has finished navigating. SPA route
+// changes continue to use the debounced listeners above.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && /^https?:\/\//.test(tab.url || "")) {
+    scheduleScan(tabId);
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PING") {
     sendResponse({ ok: true });
@@ -51,10 +59,71 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "PAGE_CHANGED" && sender.tab?.id != null) {
     if (message.payload?.reason === "content") scheduleScan(sender.tab.id);
   } else if (message.type === "START_SCAN") {
-    runScan(message.payload && message.payload.tabId).then(sendResponse);
+    runScan(message.payload && message.payload.tabId, { saveHistory: true }).then(sendResponse);
     return true; // keep the channel open for the async reply
+  } else if (message.type === "ANALYZE_POLICY") {
+    analyzeCurrentPage(message.payload?.tabId)
+      .then(sendResponse)
+      .catch((error) => sendResponse(error?.error ? error : {
+        error: true, code: "GEMINI_FAILED", message: "Could not analyze this page. Open a regular website and try again."
+      }));
+    return true;
+  } else if (message.type === "CHECK_REPUTATION") {
+    checkSiteReputation(message.payload?.url)
+      .then(sendResponse)
+      .catch((err) => {
+        console.warn("PrivacyGuard: site reputation check failed", err);
+        sendResponse({ status: "unavailable" });
+      });
+    return true;
   }
 });
+
+async function analyzeCurrentPage(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  let pageUrl;
+  try {
+    const parsed = new URL(tab.url || "");
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported page");
+    pageUrl = parsed.origin;
+  } catch {
+    throw { error: true, code: "RESTRICTED_PAGE", message: "Open a regular HTTP or HTTPS page to analyze it." };
+  }
+  const [page] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      if (!document.body) return "";
+      const ignored = "script,style,noscript,template,svg,canvas,iframe,input,textarea,select,button,[contenteditable],[aria-hidden='true']";
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const chunks = [];
+      let length = 0;
+      while (walker.nextNode() && length < 30000) {
+        const node = walker.currentNode;
+        const element = node.parentElement;
+        if (!element || element.closest(ignored)) continue;
+        let visible = true;
+        for (let current = element; current && current !== document.body; current = current.parentElement) {
+          const style = getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+            visible = false;
+            break;
+          }
+        }
+        if (!visible) continue;
+        const text = node.nodeValue.replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        chunks.push(text);
+        length += text.length + 1;
+      }
+      return chunks.join(" ").slice(0, 30000);
+    }
+  });
+  const pageText = page?.result || "";
+  if (pageText.length < 30) {
+    throw { error: true, code: "GEMINI_FAILED", message: "There is not enough visible page text to analyze." };
+  }
+  return analyzePageContent(pageUrl, pageText);
+}
 
 function collect(tabId, { source, data }) {
   const job = pending.get(tabId);
@@ -63,7 +132,7 @@ function collect(tabId, { source, data }) {
   if (job.scanner && job.tracker) job.resolve();
 }
 
-async function runScan(tabId) {
+async function runScan(tabId, { saveHistory = false } = {}) {
   let tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -96,9 +165,26 @@ async function runScan(tabId) {
     },
     policy: trackerData.policy || ZERO_POLICY
   };
+  if (!scan.tracking.cookies.detailsAvailable) {
+    warnings.push("Cookies could not be read. Cookie counts and details are unavailable.");
+  }
 
   try {
-    const result = await postScan(scan);
+    const result = await postScan({
+      ...scan,
+      tracking: {
+        cookies: {
+          total: scan.tracking.cookies.total,
+          firstParty: scan.tracking.cookies.firstParty,
+          thirdParty: scan.tracking.cookies.thirdParty
+        },
+        thirdPartyScripts: scan.tracking.thirdPartyScripts,
+        trackers: scan.tracking.trackers
+      }
+    }, { saveHistory });
+    // TLS status comes from the backend's certificate-verifying handshake,
+    // not from the URL scheme or the page itself.
+    scan.tls = result.tls ?? null;
     const report = { scan, result, policyAnalysis: null, warnings };
     await saveReport(tabId, report);
     notify({ type: "REPORT_READY", payload: { tabId, report } });
@@ -142,31 +228,35 @@ const siteOf = (host) => host.replace(/^\./, "").split(".").slice(-2).join(".");
 async function countCookies(hostname, trackerList) {
   const site = siteOf(hostname);
   const key = (c) => `${c.domain}|${c.name}|${c.path}`;
+  const detail = (cookie) => ({ name: cookie.name, domain: cookie.domain });
   try {
-    const firstRaw = await chrome.cookies.getAll({ domain: site });
-    const firstSeen = new Set();
-    const firstPartyList = [];
-    for (const c of firstRaw) {
-      const k = key(c);
-      if (!firstSeen.has(k)) { firstSeen.add(k); firstPartyList.push({ name: c.name, domain: c.domain }); }
-    }
-    const thirdSeen = new Set();
-    const thirdPartyList = [];
+    const first = new Map((await chrome.cookies.getAll({ domain: site })).map((cookie) => [key(cookie), detail(cookie)]));
+    const third = new Map();
+    // Cookies are usually set on the parent domain (doubleclick.net), not the script's subdomain, so look up the site.
     const domains = new Set(trackerList.map((t) => siteOf(t.domain)).filter((s) => s !== site));
     for (const d of domains) {
-      for (const c of await chrome.cookies.getAll({ domain: d })) {
-        const k = key(c);
-        if (!thirdSeen.has(k)) { thirdSeen.add(k); thirdPartyList.push({ name: c.name, domain: c.domain }); }
+      for (const cookie of await chrome.cookies.getAll({ domain: d })) {
+        third.set(key(cookie), detail(cookie));
       }
     }
     return {
-      total: firstPartyList.length + thirdPartyList.length,
-      firstParty: firstPartyList.length, thirdParty: thirdPartyList.length,
-      firstPartyList, thirdPartyList
+      total: first.size + third.size,
+      firstParty: first.size,
+      thirdParty: third.size,
+      firstPartyList: Array.from(first.values()),
+      thirdPartyList: Array.from(third.values()),
+      detailsAvailable: true
     };
   } catch (err) {
     console.warn("PrivacyGuard: cookie read failed", err);
-    return { total: 0, firstParty: 0, thirdParty: 0, firstPartyList: [], thirdPartyList: [] };
+    return {
+      total: 0,
+      firstParty: 0,
+      thirdParty: 0,
+      firstPartyList: [],
+      thirdPartyList: [],
+      detailsAvailable: false
+    };
   }
 }
 

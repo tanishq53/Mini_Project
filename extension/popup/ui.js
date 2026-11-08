@@ -126,43 +126,211 @@ function renderFieldTypes(fieldTypes) {
     if (shown === 0) box.append(makeRow("None detected", "", { indent: true }));
 }
 
+function renderExpandableRows(containerId, rows) {
+    const container = $(containerId);
+    container.replaceChildren();
+
+    for (const { key, label, count, items, detailsAvailable, formatItem } of rows) {
+        const row = el("div", "row detail-row");
+        row.append(el("span", "row-name", label));
+
+        const value = el("span", "row-value detail-value");
+        const missing = count === undefined || count === null;
+        const countNode = el("span", "detail-count", missing ? "\u2014" : String(count));
+        countNode.classList.toggle("zero", missing || count === 0);
+        value.append(countNode);
+
+        const detailsId = `${containerId}-${key}-details`;
+        const toggle = el("button", "detail-toggle");
+        toggle.type = "button";
+        toggle.setAttribute("aria-label", `Show ${label.toLowerCase()} details`);
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-controls", detailsId);
+        toggle.append(el("span", "detail-chevron"));
+        value.append(toggle);
+        row.append(value);
+        container.append(row);
+
+        const list = el("ul", "details-list");
+        list.id = detailsId;
+        list.hidden = true;
+
+        if (missing || !detailsAvailable || (count > 0 && !items.length)) {
+            list.append(el("li", "muted", "Details are unavailable for this scan."));
+        } else if (count === 0) {
+            list.append(el("li", "muted", "None detected."));
+        } else {
+            let shown = 0;
+            const moreButton = el("button", "details-more", "Show 10 more");
+            moreButton.type = "button";
+            const moreItem = el("li");
+            moreItem.append(moreButton);
+            list.append(moreItem);
+            const appendNextPage = () => {
+                const nextItems = items.slice(shown, shown + 10);
+                for (const item of nextItems) {
+                    const detail = el("li", "", formatItem(item));
+                    list.insertBefore(detail, moreItem);
+                    shown++;
+                }
+                moreButton.hidden = shown >= items.length;
+            };
+            appendNextPage();
+            moreButton.addEventListener("click", appendNextPage);
+        }
+        container.append(list);
+
+        toggle.addEventListener("click", () => {
+            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            toggle.setAttribute("aria-expanded", String(!expanded));
+            toggle.setAttribute("aria-label", `${expanded ? "Show" : "Hide"} ${label.toLowerCase()} details`);
+            list.hidden = expanded;
+        });
+    }
+}
+
+function renderTrackers(tracking) {
+    const counts = tracking?.trackers;
+    const trackerList = tracking?.trackerList;
+    const categories = [
+        ["analytics", "Analytics"],
+        ["advertising", "Advertising"],
+        ["social", "Social media"],
+        ["unknown", "Unrecognised third party"]
+    ];
+
+    renderExpandableRows("tracker-rows", categories.map(([key, label]) => ({
+        key,
+        label,
+        count: counts?.[key],
+        items: Array.isArray(trackerList)
+            ? trackerList.filter((tracker) => tracker.category === key && typeof tracker.domain === "string")
+            : [],
+        detailsAvailable: Array.isArray(trackerList),
+        formatItem: (tracker) => tracker.domain
+    })));
+}
+
+function renderCookies(cookies) {
+    const firstParty = cookies?.firstPartyList;
+    const thirdParty = cookies?.thirdPartyList;
+    const hasDetails = cookies?.detailsAvailable === true;
+    const firstItems = Array.isArray(firstParty) ? firstParty : [];
+    const thirdItems = Array.isArray(thirdParty) ? thirdParty : [];
+    const formatCookie = (cookie) => {
+        const name = cookie.name || "(unnamed cookie)";
+        return cookie.domain ? `${name} (${cookie.domain})` : name;
+    };
+
+    renderExpandableRows("cookie-rows", [
+        {
+            key: "total",
+            label: "Total",
+            count: cookies?.total,
+            items: [...firstItems, ...thirdItems],
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        },
+        {
+            key: "first-party",
+            label: "First-party",
+            count: cookies?.firstParty,
+            items: firstItems,
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        },
+        {
+            key: "third-party",
+            label: "Third-party",
+            count: cookies?.thirdParty,
+            items: thirdItems,
+            detailsAvailable: hasDetails,
+            formatItem: formatCookie
+        }
+    ]);
+}
+
+function policyCategory(text, href) {
+    const value = `${text || ""} ${href || ""}`.toLowerCase();
+    if (/cookie|tracking|consent/.test(value)) return "Cookie policy";
+    if (/refund|return/.test(value)) return "Refund & returns";
+    if (/shipping|delivery/.test(value)) return "Shipping policy";
+    if (/accessibility/.test(value)) return "Accessibility statement";
+    if (/terms|user agreement|acceptable use|community guidelines/.test(value)) return "Terms & use";
+    if (/security|vulnerability|responsible disclosure/.test(value)) return "Security policy";
+    if (/data protection|data processing|personal data|data use|information practices/.test(value)) return "Data policy";
+    if (/privacy/.test(value)) return "Privacy policy";
+    if (/legal|disclaimer|copyright/.test(value)) return "Legal notice";
+    return "Other policy";
+}
+
+export function getPolicyCandidates(policy) {
+    const found = [];
+    const seen = new Set();
+    const add = (href, text) => {
+        const url = safeUrl(href);
+        if (!url) return;
+        const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+        const pathname = url.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "").toLowerCase() || "/";
+        const key = `${url.protocol}//${host}${pathname}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const label = (text || "").trim();
+        const category = policyCategory(label, `${url.origin}${url.pathname}`);
+        found.push({
+            title: category,
+            category,
+            source: host,
+            pathName: pathname.split("/").filter(Boolean).at(-1) || host,
+            href: url.href
+        });
+    };
+
+    for (const candidate of policy?.candidates ?? []) add(candidate.href, candidate.text);
+    if (policy?.found && policy.url) add(policy.url, "Privacy policy");
+    const categoryCounts = new Map();
+    const categoryHostCounts = new Map();
+    for (const candidate of found) {
+        categoryCounts.set(candidate.category, (categoryCounts.get(candidate.category) || 0) + 1);
+        const key = `${candidate.category}|${candidate.source}`;
+        categoryHostCounts.set(key, (categoryHostCounts.get(key) || 0) + 1);
+    }
+    for (const candidate of found) {
+        const sameType = categoryCounts.get(candidate.category) > 1;
+        const sameHost = categoryHostCounts.get(`${candidate.category}|${candidate.source}`) > 1;
+        candidate.sourceLabel = sameType ? (sameHost ? candidate.pathName : candidate.source) : "";
+        candidate.displayTitle = candidate.sourceLabel
+            ? `${candidate.title} · ${candidate.sourceLabel}`
+            : candidate.title;
+    }
+    return found;
+}
+
 function renderPolicyLinks(policy) {
     const list = $("policy-links");
     list.replaceChildren();
+    const candidates = getPolicyCandidates(policy);
+    const hint = $("policy-hint");
+    const button = $("btn-analyze-policies");
+    hint.textContent = candidates.length
+        ? `${candidates.length} linked policy page${candidates.length === 1 ? "" : "s"} found.${candidates.length > 12 ? " The first 12 can be analyzed in one run." : ""}`
+        : "No linked policy pages were detected on this page.";
+    button.disabled = candidates.length === 0;
+    button.textContent = candidates.length ? "Analyze policies" : "No policies found";
 
-    const main = policy?.found ? safeUrl(policy.url) : null;
-    const status = $("v-policy");
-    status.className = "tag " + (main ? "ok" : "warn");
-    status.textContent = main ? "Found" : "Not found";
-
-    const addLink = (u, text) => {
-        const li = el("li");
-        const a = el("a", "", text || shortUrl(u));
-        a.href = u.href;
+    for (const candidate of candidates) {
+        const li = el("li", "policy-link-row");
+        const a = el("a", "policy-link-anchor", candidate.title);
+        a.href = candidate.href;
         a.target = "_blank";
         a.rel = "noopener noreferrer";
         li.append(a);
+        if (candidate.sourceLabel) li.append(el("span", "policy-kind", candidate.sourceLabel));
         list.append(li);
-    };
-
-    if (main) {
-        addLink(main);
-        return;
     }
-
-    // Not found: offer anything privacy-related the scanner noticed, so the user can open it.
-    const seen = new Set();
-    let count = 0;
-    for (const c of policy?.candidates ?? []) {
-        const u = safeUrl(c.href);
-        if (!u || seen.has(u.href) || count >= 5) continue;
-        seen.add(u.href);
-        addLink(u, c.text ? `${c.text} (${shortUrl(u)})` : undefined);
-        count++;
-    }
-    if (count === 0) {
+    if (candidates.length === 0) {
         const li = el("li");
-        li.append(el("span", "muted", "No privacy links found on this page. Try the login or sign-up page."));
+        li.append(el("span", "muted", "Try opening a page that links to the site's policies, then rescan."));
         list.append(li);
     }
 }
@@ -270,15 +438,8 @@ export function renderReport(report) {
     renderFieldTypes(scan.scanner?.fieldTypes);
 
     // Trackers and cookies
-    const trackers = scan.tracking?.trackers;
-    setNumber("v-analytics", trackers?.analytics);
-    setNumber("v-advertising", trackers?.advertising);
-    setNumber("v-social", trackers?.social);
-    setNumber("v-unknown", trackers?.unknown);
-    const cookies = scan.tracking?.cookies;
-    setNumber("v-cookies", cookies?.total);
-    setNumber("v-cookies-first", cookies?.firstParty);
-    setNumber("v-cookies-third", cookies?.thirdParty);
+    renderTrackers(scan.tracking);
+    renderCookies(scan.tracking?.cookies);
 
     // Render tracker details
     const trackerList = scan.tracking?.trackerList || [];
@@ -309,7 +470,25 @@ export function renderReport(report) {
     // Connection
     const https = $("v-https");
     https.className = "tag " + (scan.https ? "ok" : "bad");
-    https.textContent = scan.https ? "Secure" : "Not secure";
+    https.textContent = scan.https ? "HTTPS" : "HTTP";
+    const tls = $("v-tls");
+    const tlsState = scan.tls;
+    if (!scan.https) {
+        tls.className = "tag";
+        tls.textContent = "Not applicable";
+    } else if (tlsState === "secure") {
+        tls.className = "tag ok";
+        tls.textContent = "Trusted by backend";
+    } else if (tlsState === "insecure") {
+        tls.className = "tag bad";
+        tls.textContent = "Certificate not trusted";
+    } else if (tlsState === "broken") {
+        tls.className = "tag bad";
+        tls.textContent = "TLS handshake failed";
+    } else {
+        tls.className = "tag warn";
+        tls.textContent = "Could not check";
+    }
 
     // Policy
     renderPolicyLinks(scan.policy);
@@ -318,58 +497,160 @@ export function renderReport(report) {
     setNumber("b-personal", result.breakdown?.personalData);
     setNumber("b-trackers", result.breakdown?.trackers);
     setNumber("b-security", result.breakdown?.security);
-    setNumber("b-policy", result.breakdown?.policy);
 
     renderRecommendations(result.recommendations);
     renderWarnings(report?.warnings);
 
-    // Policy summary (only after the user clicked Analyze policy)
-    renderPolicyAnalysis(report?.policyAnalysis);
-    const canAnalyze = !!(scan.policy?.found && safeUrl(scan.policy.url));
-    setAnalyzeButton(report?.policyAnalysis ? "done" : canAnalyze ? "ready" : "unavailable");
+    setAnalyzeButton(report?.policyAnalysis ? "done" : "ready");
+}
+
+const THREAT_LABELS = {
+    MALWARE: "Malware",
+    SOCIAL_ENGINEERING: "Phishing or deceptive content",
+    UNWANTED_SOFTWARE: "Unwanted software"
+};
+
+export function renderReputation(result) {
+    const status = $("reputation-status");
+    const message = $("reputation-message");
+    const states = {
+        checking: ["Checking", "Checking this page's path with Google Safe Browsing.", "warn"],
+        not_configured: [
+            "Not configured",
+            "Add GOOGLE_SAFE_BROWSING_API_KEY to backend/.env and restart the backend to enable this check.",
+            "warn"
+        ],
+        mock: [
+            "Demo mode",
+            "Site reputation checks are not run while using mock scan data.",
+            "warn"
+        ],
+        unavailable: [
+            "Unavailable",
+            "Google Safe Browsing could not check this domain. The privacy score is unaffected.",
+            "warn"
+        ],
+        safe: [
+            "No known threats",
+            "Google Safe Browsing found no listed threats for this domain. This does not guarantee the site or its downloads are safe.",
+            "ok"
+        ],
+        unsafe: [
+            "Threat reported",
+            "",
+            "bad"
+        ]
+    };
+    const state = states[result?.status] || states.unavailable;
+    status.textContent = state[0];
+    status.className = "tag " + state[2];
+
+    if (result?.status === "unsafe") {
+        const threats = (result.threatTypes || [])
+            .map((type) => THREAT_LABELS[type])
+            .filter(Boolean);
+        message.textContent = threats.length
+            ? `Google Safe Browsing flagged this domain for: ${threats.join(", ")}. Avoid visiting or downloading from it.`
+            : "Google Safe Browsing flagged this domain. Avoid visiting or downloading from it.";
+        return;
+    }
+    message.textContent = state[1];
 }
 
 /* ---------- policy summary ---------- */
 
-export function renderPolicyAnalysis(analysis) {
-    const section = $("policy-analysis");
-    const body = $("policy-analysis-body");
-    body.replaceChildren();
-    if (!analysis) {
-        section.hidden = true;
-        return;
+function appendAnalysisBullets(container, analysis) {
+    const list = el("ol", "analysis-list");
+    const addBullet = (label, value) => {
+        if (typeof value !== "string" || !value.trim()) return;
+        const item = el("li", "");
+        item.append(el("strong", "analysis-label", `${label}: `), document.createTextNode(value.trim()));
+        list.append(item);
+    };
+    const addBulletGroup = (label, values) => {
+        if (!Array.isArray(values) || !values.some((value) => typeof value === "string" && value.trim())) return;
+        const item = el("li", "analysis-group");
+        item.append(el("strong", "analysis-label", `${label}:`));
+        const nested = el("ol", "analysis-sublist");
+        values.filter((value) => typeof value === "string" && value.trim())
+            .slice(0, 6)
+            .forEach((value) => nested.append(el("li", "", value.trim())));
+        item.append(nested);
+        list.append(item);
+    };
+
+    addBullet("Page type", analysis.pageType || "Not identified");
+    addBullet("Summary", analysis.summary || "No summary was returned.");
+    addBulletGroup("Key points", analysis.keyPoints);
+    addBulletGroup("Privacy signals", analysis.privacySignals);
+
+    const policy = analysis.policyDetails || {};
+    const policyPage = /privacy|terms|legal|cookie|data protection/i.test(analysis.pageType || "");
+    const sharingSpecified = ["Yes", "No"].includes(policy.dataSharing);
+    const hasPolicyDetails = [policy.dataCollected, policy.purposes, policy.concerns]
+        .some((values) => Array.isArray(values) && values.length > 0) ||
+        sharingSpecified ||
+        [policy.thirdParties, policy.retention, policy.deletion]
+            .some((value) => typeof value === "string" && value.trim() && !/^(not stated|unclear)/i.test(value.trim()));
+    if (policyPage || hasPolicyDetails) {
+        addBulletGroup("Data collected", policy.dataCollected);
+        addBulletGroup("Purposes", policy.purposes);
+        addBullet("Data sharing", policy.dataSharing || "Unclear");
+        addBullet("Third parties", policy.thirdParties || "Not stated on this page");
+        addBullet("Retention", policy.retention || "Not stated on this page");
+        addBullet("Deletion", policy.deletion || "Not stated on this page");
+        addBulletGroup("Potential concerns", policy.concerns);
+    }
+    container.append(list);
+}
+
+export function renderPolicyReports(segments) {
+    const list = $("policy-report-list");
+    const opener = $("open-policy-reports");
+    const count = $("policy-report-count");
+    list.replaceChildren();
+    const reports = Array.isArray(segments) ? segments.filter((segment) => segment?.analysis) : [];
+    opener.disabled = reports.length === 0;
+    count.textContent = reports.length
+        ? `${reports.length} report${reports.length === 1 ? "" : "s"} · expand one to read it`
+        : "Analyze this page or the linked policy pages to build a report.";
+
+    if (reports.length) {
+        const overview = el("section", "policy-report-overview");
+        overview.append(el("h3", "", "Quick overview"));
+        const points = el("ul", "policy-overview-points");
+        reports.forEach((segment) => {
+            const summary = segment.analysis.summary || segment.analysis.keyPoints?.[0];
+            if (summary) points.append(el("li", "", `${segment.title || segment.category}: ${summary}`));
+        });
+        if (!points.children.length) points.append(el("li", "", `${reports.length} page${reports.length === 1 ? "" : "s"} analyzed. Expand a section below for details.`));
+        overview.append(points);
+        list.append(overview);
     }
 
-    body.append(makeRow("Data collected", listText(analysis.dataCollected), { stack: true }));
-    body.append(makeRow("Why it is collected", listText(analysis.purposes), { stack: true }));
-
-    const shared = analysis.dataSharing
-        ? makeTag("Yes", "warn")
-        : makeTag("No", "ok");
-    body.append(makeRow("Shared with third parties", shared));
-    if (analysis.thirdParties) {
-        const note = el("p", "muted", analysis.thirdParties);
-        note.style.paddingBottom = "8px";
-        body.append(note);
-    }
-
-    body.append(makeRow("Retention", analysis.retention || "Not specified", { stack: true }));
-    body.append(makeRow("Deletion", analysis.deletion || "Not specified", { stack: true }));
-
-    if (analysis.concerns?.length) {
-        body.append(makeRow("Concerns", analysis.concerns.join(". "), { stack: true }));
-    }
-    section.hidden = false;
+    reports.forEach((segment, index) => {
+        const section = el("details", "policy-report-segment");
+        const heading = el("summary", "policy-report-summary", `${index + 1}. ${segment.title || segment.category || "Policy page"}`);
+        section.append(heading);
+        appendAnalysisBullets(section, segment.analysis);
+        section.addEventListener("toggle", () => {
+            if (!section.open) return;
+            for (const other of list.querySelectorAll(".policy-report-segment[open]")) {
+                if (other !== section) other.open = false;
+            }
+        });
+        list.append(section);
+    });
 }
 
 // mode: "ready" | "loading" | "done" | "unavailable"
 export function setAnalyzeButton(mode) {
     const btn = $("btn-analyze");
     const labels = {
-        ready: "Analyze policy",
-        loading: "Analyzing policy\u2026",
-        done: "Policy analyzed",
-        unavailable: "No policy to analyze"
+        ready: "Analyze this page",
+        loading: "Analyzing page\u2026",
+        done: "Page analyzed",
+        unavailable: "Analysis unavailable"
     };
     btn.textContent = labels[mode] ?? labels.ready;
     btn.disabled = mode !== "ready";
@@ -401,8 +682,12 @@ export function errorCopy(code, fallbackMessage) {
             "The policy page did not load. Open it in a tab and scan that page instead."
         ],
         GEMINI_FAILED: [
-            "Policy summary unavailable",
-            "The risk score is still valid. Try the summary again in a moment."
+            "Page analysis unavailable",
+            "Check the backend Gemini API key and connection, then try again."
+        ],
+        EXTENSION_AUTH_REQUIRED: [
+            "Connect PrivacyGuard first",
+            "Sign in to the dashboard, create a connection key, then save it in the extension options."
         ],
         INVALID_INPUT: [
             "Unexpected data",

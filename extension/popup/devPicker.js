@@ -33,7 +33,7 @@ export function mountDevPicker() {
     const fail = document.createElement("input");
     fail.type = "checkbox";
     fail.addEventListener("change", () => setMockAnalyzeFails(fail.checked));
-    failLabel.append(fail, " Make Analyze policy fail");
+    failLabel.append(fail, " Make page analysis fail");
 
     bar.append(label, select, failLabel);
     document.body.prepend(bar);

@@ -3,7 +3,7 @@
 // Returns the exact shape required by docs/contract.md §4.2:
 //   { found: boolean, url: string|null, candidates: [{text, href}] }
 // Does NOT read cookies, form values, passwords, or user-entered data.
-// Does NOT call the backend or implement Gemini features.
+// Discovery only. The visible-page analysis runs separately after a user request.
 
 window.__pgDetectPolicy = function () {
   const candidates = [];
@@ -27,39 +27,43 @@ window.__pgDetectPolicy = function () {
     if (!href) {
       continue;
     }
+    // In-page anchors inherit the current policy page's URL path. They are
+    // navigation controls, not separate policy documents.
+    if (/^[#?]/.test(href.trim())) continue;
+
+    let url;
+    try {
+      url = new URL(href, window.location.href);
+    } catch {
+      continue;
+    }
+
+    if (!["http:", "https:"].includes(url.protocol)) {
+      continue;
+    }
 
     const description = text.toLowerCase();
-    const urlText = href.toLowerCase();
+    // Ignore search parameters and fragments. Login links often carry a return
+    // URL containing "privacy-policy" but are not policy pages themselves.
+    const urlPath = url.pathname.toLowerCase();
 
     const isPolicyLink =
-      /privacy|cookie|data protection|data policy|personal data/.test(
-        description + " " + urlText
+      /privacy|cookie|\bpolicy\b|data protection|data processing|data retention|data policy|personal data|data use|information practices|do not sell|privacy choices|terms(?:\s+(?:and|&)\s+conditions)?|terms of service|user agreement|acceptable use|community guidelines|security policy|responsible disclosure|legal notice|disclaimer|copyright|refund|return policy|shipping policy|accessibility statement/.test(
+        description + " " + urlPath
       );
 
     if (!isPolicyLink) {
       continue;
     }
 
-    try {
-      const url = new URL(href, window.location.href);
+    const key = `${url.origin.replace(/^https?:\/\/www\./i, "https://")}${url.pathname.replace(/\/+$/, "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
 
-      if (!["http:", "https:"].includes(url.protocol)) {
-        continue;
-      }
-
-      if (seen.has(url.href)) {
-        continue;
-      }
-
-      seen.add(url.href);
-
-      candidates.push({
-        text: text || "Privacy-related link",
-        href: url.href
-      });
-    } catch {
-      continue;
-    }
+    candidates.push({
+      text: text || "Privacy-related link",
+      href: url.href
+    });
   }
 
   // Rank candidates by relevance — three tiers, first match wins.
