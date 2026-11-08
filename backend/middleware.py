@@ -128,12 +128,18 @@ class RequestSecurityMiddleware:
                 self._audit(scope, method, safe_endpoint, key_id, 429, start)
                 return
 
-        if is_protected and not configured_key:
+        # Firebase account keys are verified by the route; retain the optional
+        # shared key for direct API/legacy clients and fail closed if neither is configured.
+        is_account_key = token.startswith(b"pg_")
+        if is_protected and not configured_key and not is_account_key:
             await self._reject(send_with_headers, 503, "SERVER_MISCONFIGURED", "The API authentication key is not configured.")
             self._audit(scope, method, safe_endpoint, key_id, 503, start)
             return
-
-        if is_protected and configured_key and not hmac.compare_digest(token, configured_key):
+        if is_protected and configured_key and not is_account_key and not hmac.compare_digest(token, configured_key):
+            await self._reject(send_with_headers, 401, "AUTH_REQUIRED", "A valid bearer token is required.")
+            self._audit(scope, method, safe_endpoint, key_id, 401, start)
+            return
+        if is_protected and production and not token:
             await self._reject(send_with_headers, 401, "AUTH_REQUIRED", "A valid bearer token is required.")
             self._audit(scope, method, safe_endpoint, key_id, 401, start)
             return
