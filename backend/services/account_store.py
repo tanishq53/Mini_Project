@@ -253,16 +253,15 @@ def read_history(user_id: int, days: int) -> dict[str, Any]:
     start = _now() - timedelta(days=days)
     db = _connect()
     try:
-        where = "user_id = ? AND visited_at >= ?"
         params = (user_id, _stamp(start))
-        rows = db.execute(f"""SELECT hostname, visited_at, risk_score, risk_level, tls FROM visit_history
-            WHERE {where} ORDER BY visited_at DESC LIMIT 500""", params).fetchall()
-        total = db.execute(f"SELECT COUNT(*) FROM visit_history WHERE {where}", params).fetchone()[0]
-        unique_sites = db.execute(f"SELECT COUNT(DISTINCT hostname) FROM visit_history WHERE {where}", params).fetchone()[0]
-        grouped = db.execute(f"""SELECT substr(visited_at, 1, 10) AS date, COUNT(*) AS visits
-            FROM visit_history WHERE {where} GROUP BY date ORDER BY date""", params).fetchall()
-        sites = db.execute(f"""SELECT hostname, COUNT(*) AS visits, ROUND(AVG(risk_score)) AS average_risk
-            FROM visit_history WHERE {where} GROUP BY hostname
+        rows = db.execute("""SELECT hostname, visited_at, risk_score, risk_level, tls FROM visit_history
+            WHERE user_id = ? AND visited_at >= ? ORDER BY visited_at DESC LIMIT 500""", params).fetchall()
+        total = db.execute("SELECT COUNT(*) FROM visit_history WHERE user_id = ? AND visited_at >= ?", params).fetchone()[0]
+        unique_sites = db.execute("SELECT COUNT(DISTINCT hostname) FROM visit_history WHERE user_id = ? AND visited_at >= ?", params).fetchone()[0]
+        grouped = db.execute("""SELECT substr(visited_at, 1, 10) AS date, COUNT(*) AS visits
+            FROM visit_history WHERE user_id = ? AND visited_at >= ? GROUP BY date ORDER BY date""", params).fetchall()
+        sites = db.execute("""SELECT hostname, COUNT(*) AS visits, ROUND(AVG(risk_score)) AS average_risk
+            FROM visit_history WHERE user_id = ? AND visited_at >= ? GROUP BY hostname
             ORDER BY visits DESC, hostname ASC LIMIT 10""", params).fetchall()
         visits = [{"hostname": row["hostname"], "visitedAt": row["visited_at"],
                    "riskScore": row["risk_score"], "riskLevel": row["risk_level"], "tls": row["tls"]}
