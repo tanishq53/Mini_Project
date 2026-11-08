@@ -1,6 +1,6 @@
 // PrivacyGuard background service worker. Owner: Tanishq.
 // START_SCAN -> ask the page's content scripts -> add cookies -> POST /scan -> report.
-import { checkSiteReputation, postScan } from "../utils/api.js";
+import { analyzePageContent, checkSiteReputation, postScan } from "../utils/api.js";
 import { SCAN_TIMEOUT_MS } from "../utils/config.js";
 import { removeReport, saveReport } from "../utils/storage.js";
 
@@ -43,6 +43,14 @@ chrome.webNavigation.onReferenceFragmentUpdated.addListener(({ tabId, frameId })
   if (frameId === 0) scheduleScan(tabId);
 });
 
+// Scan each regular top-level page once it has finished navigating. SPA route
+// changes continue to use the debounced listeners above.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && /^https?:\/\//.test(tab.url || "")) {
+    scheduleScan(tabId);
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PING") {
     sendResponse({ ok: true });
@@ -53,6 +61,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "START_SCAN") {
     runScan(message.payload && message.payload.tabId).then(sendResponse);
     return true; // keep the channel open for the async reply
+  } else if (message.type === "ANALYZE_POLICY") {
+    analyzeCurrentPage(message.payload?.tabId)
+      .then(sendResponse)
+      .catch((error) => sendResponse(error?.error ? error : {
+        error: true, code: "GEMINI_FAILED", message: "Could not analyze this page. Open a regular website and try again."
+      }));
+    return true;
   } else if (message.type === "CHECK_REPUTATION") {
     checkSiteReputation(message.payload?.url)
       .then(sendResponse)
@@ -63,6 +78,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+async function analyzeCurrentPage(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  let pageUrl;
+  try {
+    const parsed = new URL(tab.url || "");
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported page");
+    pageUrl = parsed.origin;
+  } catch {
+    throw { error: true, code: "RESTRICTED_PAGE", message: "Open a regular HTTP or HTTPS page to analyze it." };
+  }
+  const [page] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      if (!document.body) return "";
+      const ignored = "script,style,noscript,template,svg,canvas,iframe,input,textarea,select,button,[contenteditable],[aria-hidden='true']";
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const chunks = [];
+      let length = 0;
+      while (walker.nextNode() && length < 30000) {
+        const node = walker.currentNode;
+        const element = node.parentElement;
+        if (!element || element.closest(ignored)) continue;
+        let visible = true;
+        for (let current = element; current && current !== document.body; current = current.parentElement) {
+          const style = getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+            visible = false;
+            break;
+          }
+        }
+        if (!visible) continue;
+        const text = node.nodeValue.replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        chunks.push(text);
+        length += text.length + 1;
+      }
+      return chunks.join(" ").slice(0, 30000);
+    }
+  });
+  const pageText = page?.result || "";
+  if (pageText.length < 30) {
+    throw { error: true, code: "GEMINI_FAILED", message: "There is not enough visible page text to analyze." };
+  }
+  return analyzePageContent(pageUrl, pageText);
+}
 
 function collect(tabId, { source, data }) {
   const job = pending.get(tabId);
@@ -121,6 +182,9 @@ async function runScan(tabId) {
         trackers: scan.tracking.trackers
       }
     });
+    // TLS status comes from the backend's certificate-verifying handshake,
+    // not from the URL scheme or the page itself.
+    scan.tls = result.tls ?? null;
     const report = { scan, result, policyAnalysis: null, warnings };
     await saveReport(tabId, report);
     notify({ type: "REPORT_READY", payload: { tabId, report } });

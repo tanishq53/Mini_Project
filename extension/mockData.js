@@ -30,7 +30,13 @@ function makeReport({ hostname, path = "/", https = true, forms = 0, fields = {}
   };
 }
 
-export const MOCK_POLICY_ANALYSIS = { dataCollected: [], purposes: [], dataSharing: false, thirdParties: "", retention: "", deletion: "", concerns: [] };
+export const MOCK_POLICY_ANALYSIS = {
+  pageType: "Privacy notice",
+  summary: "This page describes how the site handles personal information.",
+  keyPoints: ["The notice applies to account and site usage."],
+  privacySignals: ["Analytics use is described."],
+  policyDetails: { dataCollected: ["Email"], purposes: ["Account support"], dataSharing: "Unclear", thirdParties: "Not stated", retention: "Not stated", deletion: "Not stated", concerns: [] }
+};
 
 export const SCENARIOS = {
   lowRisk: makeReport({ hostname: "quietnotes.example", forms: 1, fields: { email: 1 }, breakdown: { personalData: 1, trackers: 0, security: 0 }, recommendations: ["No notable privacy concerns were found on this page."] }),
@@ -46,7 +52,7 @@ export const ERRORS = {
   timeout: { error: true, code: "SCAN_TIMEOUT", message: "A module did not respond in time." },
   backendDown: { error: true, code: "BACKEND_UNREACHABLE", message: "Could not reach the PrivacyGuard server." },
   policyFetchFailed: { error: true, code: "POLICY_FETCH_FAILED", message: "Policy page could not be fetched." },
-  geminiFailed: { error: true, code: "GEMINI_FAILED", message: "AI analysis is not part of Phase 1." },
+  geminiFailed: { error: true, code: "GEMINI_FAILED", message: "Page analysis is unavailable." },
   invalidInput: { error: true, code: "INVALID_INPUT", message: "Request did not match the contract." }
 };
 

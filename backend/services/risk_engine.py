@@ -1,8 +1,8 @@
 """PrivacyGuard risk engine, Phase 1.
 
-Turns a merged scan object (docs/contract.md section 4.3) into a Privacy Risk Score.
-Phase 1 scores personal-data fields, trackers, cookies and HTTPS. It does NOT look at the
-privacy policy; that is Phase 2.
+Turns a merged scan object (docs/contract.md section 5) into a Privacy Risk Score.
+The deterministic score uses personal-data fields, trackers, cookies and connection security.
+The separate Phase 2 page analysis is explanatory and does not change this score.
 
 The engine is one pure function: calculate_risk(scan) -> dict. No network, no database, no AI,
 so it always works and is easy to test and explain.
@@ -81,14 +81,18 @@ def _parts(scan: dict) -> dict:
     trackers_raw = sum(n * w for _, n, w in tracker_items)
     cookies_raw = third_party_cookies * THIRD_PARTY_COOKIE_WEIGHT
 
-    # Only an explicit False counts as insecure, so a missing value never adds a penalty.
-    insecure = scan.get("https") is False
+    # Keep the URL scheme separate from the backend's TLS verification result.
+    # Missing TLS data is unknown and does not add a penalty.
+    https = scan.get("https")
+    tls_state = scan.get("tls")
+    insecure = https is False or tls_state in ("insecure", "broken")
     sensitive_present = any(_count(field_types.get(k)) > 0 for k in SENSITIVE_FIELDS)
     security_items = []
     if insecure:
-        security_items.append(("page is not HTTPS", NOT_HTTPS_POINTS))
+        reason = "page uses HTTP" if https is False else "HTTPS connection has a TLS issue"
+        security_items.append((reason, NOT_HTTPS_POINTS))
         if sensitive_present:
-            security_items.append(("sensitive fields on a non-HTTPS page", SENSITIVE_ON_HTTP_POINTS))
+            security_items.append(("sensitive fields on an insecure connection", SENSITIVE_ON_HTTP_POINTS))
     security_raw = sum(p for _, p in security_items)
 
     return {
@@ -112,6 +116,8 @@ def _recommendations(scan: dict, p: dict) -> list[str]:
 
     if scan.get("https") is False:
         found.append((100, "This page is not secure (HTTP). Do not enter passwords or payment details here."))
+    elif scan.get("tls") in ("insecure", "broken"):
+        found.append((100, "The TLS check found a certificate or connection problem. Avoid entering sensitive information."))
     if _count(field_types.get("governmentId")) or _count(field_types.get("financial")):
         found.append((90, "This page asks for financial or government ID details. Only continue if you trust this site."))
 

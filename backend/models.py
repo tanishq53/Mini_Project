@@ -1,6 +1,6 @@
-"""Pydantic models that mirror docs/contract.md (version 1.2) exactly.
+"""Pydantic models that mirror docs/contract.md (version 1.5) exactly.
 Field names are camelCase and case-sensitive, so we use them as-is."""
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -72,7 +72,8 @@ class ScanRequest(Loose):
     url: str
     hostname: str
     scannedAt: str
-    https: Optional[bool] = None  # only an explicit false is penalised
+    https: Optional[bool] = None  # URL scheme; explicit false means HTTP
+    tls: Optional[Literal["secure", "insecure", "broken"]] = None
     scanner: Scanner
     tracking: Tracking
     policy: Policy = Policy()
@@ -87,6 +88,7 @@ class Breakdown(Loose):
 class ScanResponse(Loose):
     id: str
     url: str
+    tls: Optional[Literal["secure", "insecure", "broken"]] = None
     riskScore: int = Field(ge=0, le=100)
     riskLevel: str
     breakdown: Breakdown

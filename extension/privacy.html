@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>PrivacyGuard privacy policy</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f3f5f2;--card:#fff;--ink:#18221d;--muted:#5e6c64;--line:#dce3dd;--green:#24664d;--soft:#e8f1ea;font:16px/1.65 "Segoe UI",Arial,sans-serif}
+    @media(prefers-color-scheme:dark){:root{--bg:#111714;--card:#19221d;--ink:#e7eee9;--muted:#a4b0a8;--line:#334139;--green:#8fc9a5;--soft:#233a2d}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}main{width:min(760px,calc(100% - 36px));margin:48px auto 72px}.brand{color:var(--green);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{font:700 clamp(34px,7vw,52px)/1.08 Georgia,"Times New Roman",serif;letter-spacing:-.045em;margin:12px 0} .lede{color:var(--muted);font-size:18px;max-width:650px;margin:0 0 28px}.updated{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--soft);color:var(--green);font-size:12px;font-weight:600}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:clamp(22px,5vw,38px);box-shadow:0 14px 36px rgb(20 40 25 / 5%)}h2{font:700 21px Georgia,"Times New Roman",serif;letter-spacing:-.025em;margin:30px 0 8px}h2:first-child{margin-top:0}p,ul{margin:0 0 14px}ul{padding-left:22px}li{padding:3px 0}a{color:var(--green);text-underline-offset:3px}.note{border-left:3px solid var(--green);padding:11px 14px;background:var(--soft);color:var(--muted);font-size:14px;margin:20px 0 0}
+  </style>
+</head>
+<body>
+  <main>
+    <p class="brand">PrivacyGuard</p>
+    <h1>Privacy policy</h1>
+    <p class="lede">This page explains what PrivacyGuard processes when it scans websites and how its optional account history and page analysis work.</p>
+    <p class="updated">Updated November 8, 2026</p>
+
+    <article class="card" style="margin-top:22px">
+      <h2>What a scan reads</h2>
+      <p>PrivacyGuard checks the current page for form and personal-data field descriptions, third-party script domains, cookie counts and metadata, and the page’s HTTP or HTTPS connection. It does not read or submit what you type into forms. Cookie values are not included in scan results or account history.</p>
+      <p>The extension may fetch linked policy pages without cookies to discover related policy links. It does not send those page contents for AI analysis unless you click an analysis button.</p>
+
+      <h2>Where scan information goes</h2>
+      <p>By default, the extension sends scan information to the PrivacyGuard backend at <code>http://localhost:8000</code> on your computer. The backend calculates the score and keeps the scan report in memory unless you configure MongoDB. If you configure another backend, that server receives the scan.</p>
+      <p>If Google Safe Browsing is configured, PrivacyGuard sends the checked page URL without its query string or fragment to Google to check for known threats.</p>
+
+      <h2>Optional policy analysis</h2>
+      <p>When you click <strong>Analyze this page</strong> or <strong>Analyze policies</strong>, PrivacyGuard sends up to 30,000 characters of page text to the configured backend and Google Gemini to produce a readable summary. Form controls and values are excluded. The submitted page text is not saved by PrivacyGuard, and the analysis does not change the risk score.</p>
+
+      <h2>Optional account history</h2>
+      <p>If you connect the extension with an account key, the backend saves minimized scan history in the Firebase project configured for PrivacyGuard: site hostname, scan time, score range, and TLS result. History is grouped by site. Detailed page text, page paths, form contents, and cookie values are not included.</p>
+      <p>Disconnecting the extension stops new history from being added but keeps existing records. Sign in to the dashboard to clear your saved history.</p>
+
+      <h2>Temporary browser storage</h2>
+      <p>The current scan report is held in Chrome session storage for its tab and is removed when that tab closes. The extension connection key is stored in the browser’s local extension storage so it remains connected between browser sessions.</p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>Use PrivacyGuard without connecting an account to avoid account history.</li>
+        <li>Choose whether to send page text for analysis by clicking an analysis button.</li>
+        <li>Disconnect the extension key or clear account history from the dashboard.</li>
+        <li>Remove the extension to stop scans and delete its browser storage.</li>
+      </ul>
+      <p class="note">PrivacyGuard is a project that can be configured with different backends and external API keys. The services enabled for your installation depend on its configuration.</p>
+    </article>
+  </main>
+</body>
+</html>

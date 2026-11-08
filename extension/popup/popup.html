@@ -9,6 +9,10 @@
 </head>
 
 <body>
+  <header class="extension-topbar">
+    <span>PrivacyGuard</span>
+    <a href="../privacy.html" target="_blank" rel="noopener noreferrer">PrivacyGuard privacy policy</a>
+  </header>
   <!--
     Four states. Only the matching [data-view] block is visible (see style.css).
     The sample values below are placeholders. ui.js overwrites them, and popup.js sets the state.
@@ -19,7 +23,7 @@
     <!-- 1. IDLE: before the first scan -->
     <section class="label empty" data-view="idle">
       <h2>Check this site's privacy</h2>
-      <p>PrivacyGuard looks at the forms, cookies, trackers and HTTPS status of the page you are viewing. It only
+      <p>PrivacyGuard looks at the forms, cookies, trackers and connection security of the page you are viewing. It only
         reads the page. It never clicks, submits or stores what you type.</p>
       <div class="actions">
         <button class="btn btn-primary" id="btn-scan" type="button">Scan this page</button>
@@ -51,11 +55,27 @@
         <span class="on"></span><span class="on"></span><span class="on"></span><span></span>
       </div>
 
-      <p class="muted score-note">Privacy exposure score. It measures what this page collects and shares. It does not judge whether the site is trustworthy.</p>
+      <div class="section policy-discovery" data-phase2>
+        <div class="section-heading-row">
+          <h2 class="section-title">Policies found on this page</h2>
+          <button class="icon-button" id="open-policy-reports" type="button" aria-label="Open analyzed policy reports"
+            title="Open analyzed reports" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" /></svg>
+          </button>
+        </div>
+        <p class="muted policy-hint" id="policy-hint">Looking for privacy, cookie, terms and other policy pages linked here.</p>
+        <ul class="link-list policy-link-list" id="policy-links">
+          <li><span class="muted">No policy pages found yet.</span></li>
+        </ul>
+        <div class="policy-action-row">
+          <button class="btn btn-primary" id="btn-analyze-policies" type="button" data-phase2 disabled>Analyze policies</button>
+        </div>
+      </div>
+
+      <p class="muted score-note">Exposure score based on data collection and sharing; it is not a trust rating.</p>
 
       <div class="section" id="site-reputation">
         <h2 class="section-title">Website reputation</h2>
-        <p class="muted reputation-message">The page path is sent to Google Safe Browsing; query and fragment are not.</p>
         <div class="row">
           <span class="row-name">Google Safe Browsing</span>
           <span class="row-value"><span class="tag warn" id="reputation-status">Checking</span></span>
@@ -91,24 +111,10 @@
 
       <div class="section">
         <h2 class="section-title">Connection</h2>
-        <div class="row"><span class="row-name">HTTPS</span><span class="row-value"><span class="tag ok"
-              id="v-https">Secure</span></span></div>
-      </div>
-
-      <div class="section" data-phase2>
-        <h2 class="section-title">Privacy policy</h2>
-        <div class="row"><span class="row-name">Status</span><span class="row-value"><span class="tag ok"
-              id="v-policy">Found</span></span></div>
-        <ul class="link-list" id="policy-links">
-          <li><a href="https://example.com/privacy" target="_blank" rel="noopener noreferrer">example.com/privacy</a>
-          </li>
-        </ul>
-      </div>
-
-      <!-- Filled after the user clicks Analyze policy. Hidden until then. -->
-      <div class="section" id="policy-analysis" data-phase2 hidden>
-        <h2 class="section-title">Policy summary</h2>
-        <div id="policy-analysis-body"></div>
+        <div class="row"><span class="row-name">Protocol</span><span class="row-value"><span class="tag"
+              id="v-https">HTTPS</span></span></div>
+        <div class="row"><span class="row-name">Certificate check</span><span class="row-value"><span class="tag"
+              id="v-tls">Waiting for scan</span></span></div>
       </div>
 
       <div class="section">
@@ -117,7 +123,6 @@
         </div>
         <div class="row"><span class="row-name">Trackers and cookies</span><span class="row-value" id="b-trackers">15</span></div>
         <div class="row"><span class="row-name">Security</span><span class="row-value" id="b-security">10</span></div>
-        <div class="row" data-phase2><span class="row-name">Policy</span><span class="row-value" id="b-policy">8</span></div>
       </div>
 
       <div class="section">
@@ -129,9 +134,22 @@
       </div>
 
       <div class="actions">
-        <button class="btn btn-primary" id="btn-analyze" type="button" data-phase2>Analyze policy</button>
+        <button class="btn btn-primary" id="btn-analyze" type="button" data-phase2>Analyze this page</button>
         <button class="btn" id="btn-rescan" type="button">Rescan</button>
       </div>
+
+      <dialog class="policy-report-dialog" id="policy-report-dialog" aria-labelledby="policy-report-title">
+        <div class="dialog-heading">
+          <div>
+            <h2 id="policy-report-title">Analyzed policy reports</h2>
+            <p class="muted" id="policy-report-count"></p>
+          </div>
+          <button class="icon-button" id="close-policy-reports" type="button" aria-label="Close analyzed reports">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg>
+          </button>
+        </div>
+        <div class="dialog-scroll" id="policy-report-list"></div>
+      </dialog>
     </section>
 
     <!-- 4. ERROR -->

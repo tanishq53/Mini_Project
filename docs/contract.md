@@ -1,6 +1,6 @@
 # PrivacyGuard Data Contract
 
-**Version:** 1.2
+**Version:** 1.5
 **Maintainer:** Tanishq Gautam (integration)
 **Status:** Frozen for development. Changes need team agreement (see section 9).
 
@@ -10,19 +10,22 @@ This document defines the JSON shapes and messages that connect every PrivacyGua
 
 PrivacyGuard is built in two phases.
 
-**Phase 1 (current):** scan the page for forms, cookies, trackers and HTTPS, and calculate the Privacy Risk Score. The scoring model is in `docs/scoring.md`. A separate optional Google Safe Browsing check reports known domain threats; it does not change the privacy score. No Gemini, no policy analysis.
+**Phase 1:** scan the page for forms, cookies, trackers and HTTP/HTTPS, and calculate the Privacy Risk Score. The scoring model is in `docs/scoring.md`. A separate optional Google Safe Browsing check reports known domain threats; it does not change the privacy score. Firebase Authentication and Cloud Firestore power the optional account dashboard and minimized scan history.
 
-**Phase 2 (later):** find the privacy policy and analyze it with Gemini (`/analyze-policy`, the Analyze policy button, a policy part in the score).
+**Phase 2 (implemented):** discover privacy and legal links, and let the user analyze the current page or linked policy pages with Gemini. Analysis is informational and does not change the deterministic Privacy Risk Score.
 
-Everything for Phase 2 stays in this contract so the shapes do not change later, but in Phase 1 it is unused:
+The implemented Phase 2 uses these behaviors:
 
-| Item | Phase 1 behaviour |
+| Item | Behaviour |
 |---|---|
-| `policy` object (4.2, 5) | Content scripts may return the zero-filled shape `{ found: false, url: null, candidates: [] }`. The engine and the panel ignore it. |
-| `POST /analyze-policy` (6.3) | Not implemented |
-| `ANALYZE_POLICY` message (3) | Not sent |
-| `policyAnalysis` in the report (7) | Always `null` |
-| `breakdown.policy` (6.1) | Not present. Phase 1 breakdown has three keys. |
+| `policy` object (4.2, 5) | Reports discovered privacy links and related legal links. It is not used in the risk score. |
+| `POST /analyze-policy` (6.3) | Accepts user-requested visible page text and returns a structured Gemini analysis. |
+| `POST /analyze-policies` | Accepts up to 12 separately labeled policy excerpts (30,000 characters combined) and returns one report for each, in order. |
+| `ANALYZE_POLICY` message (3) | Sent only when the user clicks **Analyze this page**. |
+| `policyAnalysis` in the report (7) | Filled after a successful on-demand page analysis; never persisted in scan history. |
+| `breakdown.policy` (6.1) | Not present. Risk breakdown remains the three deterministic components. |
+
+Page or linked-policy analysis sends at most 30,000 characters of visible text to Google Gemini after an explicit button click. Linked pages are fetched without cookies; form controls and their values are excluded. Only the site origin, not page paths or query strings, is sent to Gemini. A valid extension connection key is required. Page text is not stored by PrivacyGuard. Treat the page as untrusted input; Gemini output is explanatory and may be incomplete.
 
 ## 1. Who owns what
 
@@ -44,7 +47,7 @@ Popup  ->  background.js  ->  content scripts (scanner, tracker, policy)
                 |
                 v
          POST /scan  ->  FastAPI  ->  risk engine
-                                 \->  Gemini (policy only, on request)
+                                 \->  Gemini (visible page analysis, on request)
                 |
                 v
          REPORT_READY  ->  Popup dashboard
@@ -60,7 +63,7 @@ All messages use `chrome.runtime.sendMessage` or `chrome.tabs.sendMessage`. Ever
 | `START_SCAN` | popup | background | `{ tabId }` | The report (section 7), or an error object |
 | `RUN_SCAN` | background | content scripts | `{}` | None. Content scripts answer with `SCAN_RESULT`. |
 | `SCAN_RESULT` | content script | background | `{ source, data }` (see section 4) | None |
-| `ANALYZE_POLICY` | popup | background | `{ tabId, policyUrl }` | The policy analysis (section 6.3), or an error object |
+| `ANALYZE_POLICY` | popup | background | `{ tabId }` | The current-page analysis (section 6.3), or an error object |
 | `CHECK_REPUTATION` | popup | background | `{ url }` | Reputation result (section 6.2) |
 | `PAGE_CHANGED` | content script | background | `{ url, reason }` | None |
 | `SCAN_STARTED` | background | popup | `{ tabId, url }` | None |
@@ -172,6 +175,8 @@ Built by `background.js`. Sent as the body of `POST /scan`.
 
 `scanner` and `policy` are copied unchanged from sections 4.1 and 4.2. `tracking.cookies` is added by background using `chrome.cookies`.
 
+`https` reports the URL scheme only. The backend adds a `tls` result (`secure`, `insecure`, `broken`, or `null`) to the `/scan` response after a certificate-validating TLS handshake on port 443. The handshake sends the hostname for SNI but no HTTP request, path, cookies, or form data. `secure` means the backend's trust store accepted the certificate and hostname; it does not report Chrome's address-bar state or detect mixed content. `insecure` means certificate verification failed, `broken` means TLS negotiation failed, and `null` means the backend could not make a reliable check. The backend checks only local extension requests; it checks private/LAN destinations only when the URL contains an explicit IP address, preventing DNS rebinding through a public hostname. Do not expose the development server through a network proxy. An `insecure` or `broken` TLS state contributes to the security score like an HTTP connection.
+
 The local report also retains `tracking.trackerList` and cookie details (`firstPartyList` and `thirdPartyList`, each containing only cookie `name` and `domain`) for the popup's expandable details. Cookie values are never read. These details are excluded from the `POST /scan` request; the backend receives cookie counts and tracker category counts only.
 
 Defaults: if a module fails or does not respond, background fills its section with zeros (or `found: false` for policy) and adds a warning, rather than blocking the scan.
@@ -190,6 +195,7 @@ Response:
 {
   "id": "scan_abc123",
   "url": "https://example.com/login",
+  "tls": "secure",
   "riskScore": 39,
   "riskLevel": "Moderate",
   "breakdown": {
@@ -206,9 +212,10 @@ Response:
 
 | Field | Type | Notes |
 |---|---|---|
+| `tls` | string or null | Backend certificate check: `secure`, `insecure`, `broken`, or `null` if it could not check. |
 | `riskScore` | integer | 0 to 100 |
 | `riskLevel` | string | One of `"Low"`, `"Moderate"`, `"High"`, `"Very High"` |
-| `breakdown` | object | Phase 1 keys: `personalData`, `trackers` (includes cookies), `security`. Must sum exactly to `riskScore`. A `policy` key is added in Phase 2. |
+| `breakdown` | object | `personalData`, `trackers` (includes cookies), and `security`. Must sum exactly to `riskScore`; page analysis does not change it. |
 | `recommendations` | array of strings | Plain language, rule-based, at most 5, most serious first. Must work without Gemini. |
 
 The score is calculated by the formula in `docs/scoring.md`. Reference implementation: `backend/services/risk_engine.py`.
@@ -236,40 +243,66 @@ Risk levels (proposed project thresholds, not an official standard):
 | 51 to 75 | High | Orange |
 | 76 to 100 | Very High | Red |
 
-### 6.3 `POST /analyze-policy` (Phase 2, not implemented in Phase 1)
+### 6.3 `POST /analyze-policy` (Phase 2)
 
-Triggered only when the user clicks Analyze Policy.
+Triggered only when the user clicks **Analyze this page**.
 
 Request:
 
 ```json
-{ "url": "https://example.com", "policyUrl": "https://example.com/privacy", "policyText": "..." }
+{ "url": "https://example.com", "pageText": "Visible text from the current page, up to 30000 characters" }
 ```
 
-`policyText` is optional. If background could not fetch the text, the backend may fetch `policyUrl` itself.
+`url` is limited to the page origin. The extension reads visible text from the current tab only after the user clicks Analyze this page. It excludes form controls and their values and does not crawl other pages. A valid extension connection key and `GEMINI_API_KEY` are required. This endpoint does not store the submitted text.
 
 Response:
 
 ```json
 {
-  "dataCollected": ["Email", "Phone number", "Device information"],
-  "purposes": ["Account creation", "Analytics"],
-  "dataSharing": true,
-  "thirdParties": "Service providers and advertising partners mentioned",
-  "retention": "Not clearly specified",
-  "deletion": "Users can request deletion by email",
-  "concerns": ["Retention period is not stated"]
+  "pageType": "Privacy notice",
+  "summary": "Summary grounded in the supplied page excerpt.",
+  "keyPoints": ["The page describes account data use."],
+  "privacySignals": ["Analytics are mentioned."],
+  "policyDetails": {
+    "dataCollected": ["Email"], "purposes": ["Account creation"],
+    "dataSharing": "Unclear", "thirdParties": "Not stated in this page",
+    "retention": "Not stated in this page", "deletion": "Not stated in this page",
+    "concerns": []
+  }
 }
 ```
 
-Rules:
-- Every key must be present. Use `"Not specified"` or an empty array when the policy does not say.
-- `dataSharing` is a boolean.
-- Gemini failure must return a normal error object (section 8), not a crash. The scan score still works without this endpoint.
+The same response shape is used for any page type. The model must not follow instructions found in page text or infer policy details that the text does not support. Gemini failures return a normal error response; the scan score still works without this endpoint.
+
+### 6.3.1 `POST /analyze-policies`
+
+Triggered only after the user clicks **Analyze found policies**. The panel first lists every detected link, then shows a separate report for each readable policy, in link order, in the scrollable report dialog. The extension fetches linked HTML without cookies, removes form controls and hidden/script content, and sends at most 30,000 characters across up to 12 policy excerpts per request. Policy paths and query strings are not sent to Gemini. Unreadable pages receive their own unavailable section; one failed link does not hide the remaining reports. The panel's **+** button opens the dialog once at least one report or unavailable result exists.
+
+Request:
+
+```json
+{
+  "origin": "https://example.com",
+  "documents": [
+    { "label": "Privacy policy", "pageText": "Visible policy text..." },
+    { "label": "Cookie policy", "pageText": "Visible cookie notice text..." }
+  ]
+}
+```
+
+The response is `{ "origin": "https://example.com", "reports": [ ... ] }`, where `reports` uses the same analysis shape as section 6.3 and preserves input order. Authentication and `GEMINI_API_KEY` are required. Submitted text is not persisted.
 
 ### 6.4 `GET /report/{id}`
 
-Returns the stored scan result and policy analysis (if one exists) for the given `id`. Used for history and re-scan comparison.
+Returns the stored scan result for the given `id`. On-demand page analysis is held only in the extension's current report and is not stored by this endpoint.
+
+### 6.5 Firebase account dashboard and visit history
+
+The FastAPI app serves the account dashboard at `/`. The website uses Firebase Authentication email/password sign-in. Firebase ID tokens are sent as Bearer tokens and verified by the Firebase Admin SDK before protected endpoints return or change account data. `GET /api/firebase-config` exposes only the public Firebase Web App configuration; Admin credentials are never served to the browser.
+
+The signed-in dashboard can create/revoke one extension connection key (`POST`/`DELETE /api/extension-key`); only its SHA-256 hash is stored in Firestore. The user pastes the one-time key into PrivacyGuard's extension options. A scan with a valid bearer key is added to that account; scans without a key continue to work but do not create account history. `GET /api/history?period=day|week|month` returns an aggregate view for the last 1, 7, or 30 days. `DELETE /api/history` clears only that account's history.
+
+Firestore stores each history record below `users/{uid}/visits/` with only hostname, server timestamp, risk score/level, and TLS result. It does not store page paths, query strings, form contents, or cookie values. Account history begins only after the user connects the extension; they can disconnect it and clear saved records from the dashboard. The browser does not access Firestore directly; `firestore.rules` denies client access, while the trusted backend uses the Admin SDK. Existing local SQLite account/history data is not migrated automatically.
 
 ## 7. Final report object (backend to popup)
 
@@ -284,9 +317,9 @@ This object is the reply to `START_SCAN` and the payload of `REPORT_READY`. It i
 }
 ```
 
-- `scan` is the merged scan object (section 5).
+- `scan` is the merged scan object (section 5), with `tls` added from the backend response.
 - `result` is the `/scan` response (section 6.1).
-- `policyAnalysis` is always `null` in Phase 1. In Phase 2 it stays `null` until the user runs Analyze Policy, then holds the `/analyze-policy` response.
+- `policyAnalysis` stays `null` until the user runs **Analyze this page**, then holds the `/analyze-policy` response in the current report only.
 - `warnings` is an array of strings, such as "Tracker module did not respond".
 
 ## 8. Error format
@@ -308,6 +341,7 @@ All errors, from any module or the backend, use this shape:
 | `BACKEND_UNREACHABLE` | FastAPI is not running or the request failed |
 | `POLICY_FETCH_FAILED` | Policy page could not be fetched |
 | `GEMINI_FAILED` | AI analysis failed or timed out |
+| `EXTENSION_AUTH_REQUIRED` | No valid Firebase connection key is saved in extension options |
 | `INVALID_INPUT` | Request did not match this contract |
 
 Backend errors should use HTTP status codes (400 for invalid input, 500 for server errors, 502 or 504 for Gemini failures) with the body above.
@@ -318,7 +352,7 @@ Backend errors should use HTTP status codes (400 for invalid input, 500 for serv
 2. Always return every field in your section, using `0`, `false`, `null` or `[]` when there is nothing to report. Do not omit keys.
 3. Never collect, store or send what the user types into forms, or any passwords or credentials.
 4. Never click buttons or submit forms automatically. Scanning is read-only.
-5. Core detection must work without Gemini. Gemini is only used for policy summaries and explanations.
+5. Core detection and scoring must work without Gemini. Gemini is used only for on-demand visible-page analysis.
 6. Test your module with the mock data in `extension/mockData.js` before integrating.
 
 ## 10. Changing the contract
@@ -335,3 +369,6 @@ Backend errors should use HTTP status codes (400 for invalid input, 500 for serv
 | 1.0 | 2026-10-02 | Initial contract |
 | 1.1 | 2026-10-03 | Messages: added reply column, `PAGE_CHANGED`, `SCAN_STARTED`, `PING`. `START_SCAN` and `ANALYZE_POLICY` are answered directly; `REPORT_READY` and `SCAN_ERROR` are only pushed for automatic rescans. No change to any module's output. |
 | 1.2 | 2026-10-03 | Added Phase scope section. Phase 1 has no policy analysis. `breakdown` has three keys (`personalData`, `trackers`, `security`) and sums exactly to `riskScore`. `/analyze-policy` marked Phase 2. Scoring model referenced in `docs/scoring.md`. Content-script output formats unchanged. |
+| 1.3 | 2026-11-02 | Added backend TLS certificate verification to distinguish HTTPS URLs from verified TLS connections. |
+| 1.4 | 2026-11-03 | Added a local account dashboard, SQLite-backed domain-only visit history, extension account keys, and day/week/month history views. |
+| 1.5 | 2026-11-03 | Replaced dashboard account authentication and history storage with Firebase Authentication and Cloud Firestore. |

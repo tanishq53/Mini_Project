@@ -13,6 +13,7 @@ PrivacyGuard is an awareness and screening tool. It does not guarantee detection
 - Calculates a deterministic exposure score and risk level
 - Rescans after page loads, tab changes, SPA route changes and relevant dynamic content changes
 - Read-only scanning: it never clicks buttons, submits forms, or collects what you type
+- Optional sign-in dashboard with day, week and month scan history (domain and summary only)
 
 ## Project structure
 
@@ -40,6 +41,11 @@ After changing code, click the refresh icon on the PrivacyGuard card in `chrome:
 
 The backend setup is documented in [backend/README.md](backend/README.md). By default the extension expects the server at `http://localhost:8000` (change it in `extension/utils/config.js`).
 
+Connect Firebase Authentication and Cloud Firestore using the steps in
+[backend/README.md](backend/README.md). Open `http://localhost:8000/` to create a verified account
+and view history. To save scans, create a connection key in the dashboard and add it under
+PrivacyGuard's Chrome extension options. History can be disconnected or cleared in the dashboard.
+
 ## Team
 
 | Member | Module |
@@ -53,7 +59,7 @@ Contributing rules and the branch workflow are in [CONTRIBUTING.md](CONTRIBUTING
 
 ## Status
 
-Phase 1 implementation: page scanning, background orchestration, backend scoring and the side panel. Policy discovery and Gemini analysis are reserved for Phase 2. See [docs/testing/test-cases.md](docs/testing/test-cases.md) for the manual checks.
+The extension scans pages for privacy signals and supports on-demand Gemini analysis of the current page, including ordinary pages, privacy notices, and terms pages. Analysis is user-triggered and does not affect the deterministic risk score. See [backend/README.md](backend/README.md) for Gemini setup and [docs/contract.md](docs/contract.md) for the API behavior.
 
 ## License
 

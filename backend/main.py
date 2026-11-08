@@ -1,20 +1,26 @@
 """PrivacyGuard backend. Run from the backend folder:
     uvicorn main:app --reload --port 8000"""
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from routes import report, reputation, scan
+from routes import accounts, policy_analysis, report, reputation, scan
 
 log = logging.getLogger("privacyguard")
-app = FastAPI(title="PrivacyGuard API", version="1.2")
+app = FastAPI(title="PrivacyGuard API", version="1.4")
 
 # Dev only: the caller is the extension's service worker, so allow all origins locally.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+WEB_DIR = Path(__file__).resolve().parent / "web"
+app.mount("/web", StaticFiles(directory=WEB_DIR), name="web")
+app.include_router(accounts.router)
+app.include_router(policy_analysis.router)
 app.include_router(scan.router)
 app.include_router(report.router)
 app.include_router(reputation.router)
@@ -39,6 +45,11 @@ async def server_error(_: Request, exc: Exception):
         "message": "The PrivacyGuard server had an internal error."})
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
+def dashboard():
+    return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/health")
 def health():
     return {"ok": True, "service": "privacyguard-backend"}
