@@ -2,7 +2,15 @@
 .env
 *.env
 !.env.example
+.env.*
 
+# Firebase Admin service-account private keys
+*service-account*.json
+firebase-adminsdk-*.json
+
+# Local account and visit-history database
+backend/data/
+*.sqlite3
 # Python
 __pycache__/
 *.pyc

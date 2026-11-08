@@ -1,13 +1,10 @@
-# PrivacyGuard backend (Phase 1)
+# PrivacyGuard backend
 
-FastAPI service for scan validation, deterministic exposure scoring, and optional scan persistence. The API contract and scoring rules live in [../docs/contract.md](../docs/contract.md) and [../docs/scoring.md](../docs/scoring.md).
+FastAPI service for scan validation, deterministic exposure scoring, optional scan reports, Firebase account history, reputation checks, and user-requested policy analysis. The API contract and score model live in [../docs/contract.md](../docs/contract.md) and [../docs/scoring.md](../docs/scoring.md).
 
-## Requirements
+## Local setup
 
-- Python 3.10 or newer
-- Windows PowerShell commands below assume the shell starts in the repository root
-
-## Setup
+Requires Python 3.10 or newer. From the repository root in PowerShell:
 
 ```powershell
 cd backend
@@ -15,51 +12,34 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
-python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Copy the generated token into `PRIVACYGUARD_API_KEY` in the ignored `.env` file, then restart the backend. Open Chrome's PrivacyGuard settings and enter the same token. Protected endpoints fail closed when the key is missing. Never commit the token or paste it into source files.
+Configure the Firebase web values in `backend/.env` for the dashboard. Keep the Firebase Admin service-account JSON outside the repository and set `GOOGLE_APPLICATION_CREDENTIALS` to its path, or use Application Default Credentials. Never commit or share the private JSON key. Configure `GEMINI_API_KEY` for policy analysis and `GOOGLE_SAFE_BROWSING_API_KEY` for site reputation.
 
-`MONGODB_URI` is optional in development. If it is blank or MongoDB is unavailable, reports are stored in a capped in-memory cache for the lifetime of the server process. Production requires MongoDB with TLS. Never put real keys or connection strings in source control; `.env` is ignored by Git.
+For the legacy shared API credential and production startup checks, generate a random value with `python -c "import secrets; print(secrets.token_urlsafe(32))"` and place it in the ignored `PRIVACYGUARD_API_KEY` setting. The extension uses its account-specific `pg_...` connection key instead.
 
-Local development binds to loopback by default. CORS allows Chrome extension origins, and can be narrowed with `PRIVACYGUARD_ALLOWED_ORIGINS`. The extension sends its configured bearer token in the `Authorization` header. Swagger has an **Authorize** button for manual API checks.
-
-The API key is a shared deployment credential. Anyone who can inspect an extension configured with that key can extract it, so use this only for a controlled demo. A public service needs per-user short-lived tokens from an identity provider before it can provide real user authentication. Give MongoDB a dedicated least-privilege user for the PrivacyGuard database and restrict its network allowlist.
-
-## Run
-
-Start the development server from the `backend` directory:
+Start the API from the `backend` directory:
 
 ```powershell
 uvicorn main:app --reload --port 8000
 ```
 
-The health endpoint is `http://localhost:8000/`; interactive API docs are at `http://localhost:8000/docs`. The extension uses `http://localhost:8000` by default; update `extension/utils/config.js` if the server runs elsewhere.
+The dashboard is at `http://localhost:8000/`, the health endpoint is `/health`, and local interactive API documentation is at `/docs`. Create and verify a dashboard account, create a connection key, then save it in `chrome://extensions` → PrivacyGuard → **Details** → **Extension options**. Firebase connection keys are account-scoped and can be revoked from the dashboard. In production, `/scan` and `/report` require a valid Firebase account credential.
 
-Open `chrome://extensions`, select **Details** for PrivacyGuard, then **Extension options**. Set the bearer token to the exact local `PRIVACYGUARD_API_KEY` value. Swagger also has an **Authorize** button for backend checks.
+## Data and privacy
 
-## Check the backend
+Only scans sent with the extension connection key are added to the account history. History stores site domains, times, risk summaries, and TLS state; it excludes page paths, query strings, form contents, and cookie values. The dashboard can revoke the extension key, adjust retention, and clear saved history. The Admin SDK bypasses Firestore Security Rules, so keep its credentials private and deploy the restrictive rules from the repository root with `firebase deploy --only firestore:rules`.
 
-From the `backend` directory:
+The backend stores score reports only, with a capped in-memory fallback locally or optional MongoDB persistence. MongoDB reports expire after 30 days by default (`PRIVACYGUARD_RETENTION_DAYS`). Production requires MongoDB with TLS. Rate limiting is in-process; multi-worker deployments should enforce shared rate limits at the reverse proxy or use a shared rate-limit store.
 
-```powershell
-python -m pytest
-```
+For HTTPS scans, `/scan` performs a certificate-validating TLS handshake and returns `tls` as `secure`, `insecure`, `broken`, or `null` when it cannot check reliably. The handshake sends no HTTP request or page data. The check is restricted to local extension requests and should not be exposed through an untrusted proxy.
 
-The tests cover the Phase 1 risk model and API contract. Policy analysis and Gemini are not part of Phase 1.
+Policy analysis starts only when the user clicks an analysis button. It sends up to 30,000 characters of visible text to Gemini; form values, cookies, and URL paths are excluded. The backend does not save submitted page text. Analysis is informational and does not change the deterministic risk score. The default model is `gemini-3.5-flash-lite`; `GEMINI_MODEL` can override it.
 
-Run local security checks from the `backend` directory after installing the project requirements:
+## Production requirements
 
-```powershell
-python -m pip install bandit pip-audit
-bandit -r main.py middleware.py models.py routes services database
-pip-audit -r requirements.txt
-```
+Set `APP_ENV=production`, `PRIVACYGUARD_API_KEY`, `FIREBASE_PROJECT_ID`, `PRIVACYGUARD_HTTPS_ONLY=true`, an explicit `PRIVACYGUARD_ALLOWED_ORIGINS` allowlist, and a TLS-enabled `MONGODB_URI` in the deployment environment. The API refuses to start when these requirements are missing or storage is unavailable. Never commit credentials.
 
-## Production deployment requirements
+Run Uvicorn on a loopback/private interface behind a trusted TLS reverse proxy. Configure forwarded-header trust for the proxy's exact address, disable public access to the application port, and set short request/read timeouts at the proxy. Production mode disables Swagger/OpenAPI pages. Use a managed secret store for Firebase Admin credentials and API keys.
 
-The API refuses to start in production mode unless it has an explicit origin allowlist, a random API key of at least 32 characters, HTTPS-only mode, and a TLS-enabled MongoDB URI. Set `APP_ENV=production`, `PRIVACYGUARD_HTTPS_ONLY=true`, `PRIVACYGUARD_API_KEY`, `PRIVACYGUARD_ALLOWED_ORIGINS`, and `MONGODB_URI` in the deployment environment. Do not commit these values.
-
-Run Uvicorn on a loopback/private interface behind a trusted TLS reverse proxy. Configure `--forwarded-allow-ips` to the proxy's exact address so Uvicorn trusts its HTTPS scheme header, for example `uvicorn main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1` when the proxy connects from loopback. Disable public access to port 8000 and set short request/read timeouts at the proxy. Production mode disables Swagger/OpenAPI pages. The bundled single shared API key is suitable only for a controlled demonstration; replace it with per-user short-lived authentication before exposing the extension to public users.
-
-The backend caps request size and scan counts, throttles by client address and API key in-process, emits privacy-safe request metadata, and stores score reports only. It drops URL paths, query strings, and fragments before returning or storing a result. MongoDB TTL and the in-memory fallback expire reports after 30 days by default (`PRIVACYGUARD_RETENTION_DAYS`); startup removes legacy raw scan payloads from existing MongoDB report rows. For multi-worker production deployments, enforce rate limits at the reverse proxy or use a shared rate-limit store.
+The backend caps request sizes and scan counts, throttles protected endpoints by client address and credential identifier, emits privacy-safe request metadata, and avoids storing raw scan payloads. Review the Firebase and Google API usage requirements before public deployment.

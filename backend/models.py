@@ -1,4 +1,4 @@
-"""Validated request/response models for the Phase 1 API."""
+"""Strict validated request and response models for the PrivacyGuard API."""
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -127,6 +127,7 @@ class ScanRequest(StrictInput):
     hostname: str = Field(min_length=1, max_length=253)
     scannedAt: str = Field(min_length=20, max_length=64)
     https: Optional[bool] = None  # only an explicit false is penalised
+    tls: Optional[Literal["secure", "insecure", "broken"]] = None
     scanner: Scanner
     tracking: Tracking
     policy: Policy = Field(default_factory=Policy)
@@ -176,6 +177,7 @@ class Breakdown(StrictInput):
 class ScanResponse(StrictInput):
     id: str
     url: str
+    tls: Optional[Literal["secure", "insecure", "broken"]] = None
     riskScore: int = Field(ge=0, le=100)
     riskLevel: Literal["Low", "Moderate", "High", "Very High"]
     breakdown: Breakdown

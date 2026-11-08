@@ -102,7 +102,18 @@ class RequestSecurityMiddleware:
                     (b"referrer-policy", b"no-referrer"),
                     (b"cache-control", b"no-store"),
                 ]
-                if not path.startswith(("/docs", "/redoc", "/openapi.json")):
+                if path == "/" or path.startswith("/web/"):
+                    # The dashboard needs its same-origin assets and Firebase's
+                    # browser SDK/API endpoints; keep the policy scoped to that UI.
+                    dashboard_csp = (
+                        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; "
+                        "script-src 'self' 'unsafe-inline' https://www.gstatic.com; "
+                        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                        "connect-src 'self' https://www.gstatic.com https://identitytoolkit.googleapis.com "
+                        "https://securetoken.googleapis.com"
+                    )
+                    security_headers.append((b"content-security-policy", dashboard_csp.encode("ascii")))
+                elif not path.startswith(("/docs", "/redoc", "/openapi.json")):
                     security_headers.append((b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
                 if production and scope.get("scheme") == "https":
                     security_headers.append((b"strict-transport-security", b"max-age=31536000"))
@@ -128,12 +139,18 @@ class RequestSecurityMiddleware:
                 self._audit(scope, method, safe_endpoint, key_id, 429, start)
                 return
 
-        if is_protected and not configured_key:
+        # Firebase account keys are verified by the route; retain the optional
+        # shared key for direct API/legacy clients and fail closed if neither is configured.
+        is_account_key = token.startswith(b"pg_")
+        if is_protected and not configured_key and not is_account_key:
             await self._reject(send_with_headers, 503, "SERVER_MISCONFIGURED", "The API authentication key is not configured.")
             self._audit(scope, method, safe_endpoint, key_id, 503, start)
             return
-
-        if is_protected and configured_key and not hmac.compare_digest(token, configured_key):
+        if is_protected and configured_key and not is_account_key and not hmac.compare_digest(token, configured_key):
+            await self._reject(send_with_headers, 401, "AUTH_REQUIRED", "A valid bearer token is required.")
+            self._audit(scope, method, safe_endpoint, key_id, 401, start)
+            return
+        if is_protected and production and not token:
             await self._reject(send_with_headers, 401, "AUTH_REQUIRED", "A valid bearer token is required.")
             self._audit(scope, method, safe_endpoint, key_id, 401, start)
             return
