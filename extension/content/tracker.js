@@ -49,11 +49,21 @@
     return "unknown";
   }
 
+  function detectPolicy() {
+    try {
+      return typeof window.__pgDetectPolicy === "function"
+        ? window.__pgDetectPolicy()
+        : { found: false, url: null, candidates: [] };
+    } catch (error) {
+      console.warn("PrivacyGuard policy detection failed:", error);
+      return { found: false, url: null, candidates: [] };
+    }
+  }
+
   function emptyResult() {
     return {
       tracking: { thirdPartyScripts: 0, trackers: { analytics: 0, advertising: 0, social: 0, unknown: 0 }, trackerList: [] },
-      // Phase 1 keeps the contract field zero-filled; policy analysis is not run here.
-      policy: { found: false, url: null, candidates: [] }
+      policy: detectPolicy()
     };
   }
 
@@ -76,7 +86,7 @@
     for (const tracker of trackerList) trackers[tracker.category] += 1;
     return {
       tracking: { thirdPartyScripts: trackerList.length, trackers, trackerList },
-      policy: { found: false, url: null, candidates: [] }
+      policy: detectPolicy()
     };
   }
 

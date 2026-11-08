@@ -442,6 +442,7 @@ export function renderReport(report) {
     renderCookies(scan.tracking?.cookies);
 
     // Render tracker details
+    const trackers = scan.tracking?.trackers || {};
     const trackerList = scan.tracking?.trackerList || [];
     renderDetailList("details-analytics", trackerList.filter((t) => t.category === "analytics"), trackers?.analytics);
     renderDetailList("details-advertising", trackerList.filter((t) => t.category === "advertising"), trackers?.advertising);
@@ -449,6 +450,7 @@ export function renderReport(report) {
     renderDetailList("details-unknown", trackerList.filter((t) => t.category === "unknown"), trackers?.unknown);
 
     // Render cookie details
+    const cookies = scan.tracking?.cookies || {};
     const firstCookies = cookies?.firstPartyList || [];
     const thirdCookies = cookies?.thirdPartyList || [];
     const allCookies = [...firstCookies, ...thirdCookies];
@@ -615,22 +617,29 @@ export function renderPolicyReports(segments) {
         ? `${reports.length} report${reports.length === 1 ? "" : "s"} · expand one to read it`
         : "Analyze this page or the linked policy pages to build a report.";
 
-    if (reports.length) {
-        const overview = el("section", "policy-report-overview");
-        overview.append(el("h3", "", "Quick overview"));
-        const points = el("ul", "policy-overview-points");
-        reports.forEach((segment) => {
-            const summary = segment.analysis.summary || segment.analysis.keyPoints?.[0];
-            if (summary) points.append(el("li", "", `${segment.title || segment.category}: ${summary}`));
-        });
-        if (!points.children.length) points.append(el("li", "", `${reports.length} page${reports.length === 1 ? "" : "s"} analyzed. Expand a section below for details.`));
-        overview.append(points);
-        list.append(overview);
-    }
-
     reports.forEach((segment, index) => {
         const section = el("details", "policy-report-segment");
-        const heading = el("summary", "policy-report-summary", `${index + 1}. ${segment.title || segment.category || "Policy page"}`);
+        const heading = el("summary", "policy-report-summary");
+        heading.append(el("span", "policy-report-title", `${index + 1}. ${segment.title || segment.category || "Policy page"}`));
+        const helpText = segment.analysis.summary || segment.analysis.keyPoints?.[0]
+            || "Expand this section to read the analyzed points for this policy page.";
+        const help = el("span", "policy-report-help", "?");
+        help.tabIndex = 0;
+        help.setAttribute("role", "note");
+        help.setAttribute("aria-label", `Quick information: ${helpText}`);
+        const tooltip = el("span", "policy-report-tooltip", `Quick overview: ${helpText}`);
+        tooltip.setAttribute("role", "tooltip");
+        help.append(tooltip);
+        const placeTooltip = () => {
+            const iconBounds = help.getBoundingClientRect();
+            const listBounds = list.getBoundingClientRect();
+            const below = listBounds.bottom - iconBounds.bottom;
+            const above = iconBounds.top - listBounds.top;
+            help.classList.toggle("tooltip-above", below < 150 && above > below);
+        };
+        help.addEventListener("pointerenter", placeTooltip);
+        help.addEventListener("focus", placeTooltip);
+        heading.append(help);
         section.append(heading);
         appendAnalysisBullets(section, segment.analysis);
         section.addEventListener("toggle", () => {

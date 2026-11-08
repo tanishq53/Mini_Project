@@ -313,11 +313,36 @@ function findPolicyLinks(html, baseUrl) {
 async function discoverRelatedPolicyLinks(targetReport) {
     const pageUrl = targetReport?.scan?.url;
     applyPolicyCatalog(targetReport);
-    const candidates = getPolicyCandidates(targetReport?.scan?.policy);
-    if (!pageUrl || !candidates.length) return;
+    if (!pageUrl) return;
     const key = siteKey(pageUrl);
     if (!key || policyDiscoveryDone.has(key)) return;
     policyDiscoveryDone.add(key);
+
+    let candidates = getPolicyCandidates(targetReport?.scan?.policy);
+    // Inner pages (login, product, search, etc.) often have no policy links.
+    // In that case, look at the site's own homepage once for its policy index.
+    // The links are still fetched and verified below before being shown.
+    if (!candidates.length) {
+        const pageOrigin = new URL(pageUrl).origin;
+        const pageHost = new URL(pageOrigin).hostname;
+        const alternateHost = pageHost.startsWith("www.") ? pageHost.slice(4) : `www.${pageHost}`;
+        const homepageOrigins = [
+            pageOrigin,
+            `${new URL(pageOrigin).protocol}//${alternateHost}`
+        ];
+        for (const homepage of homepageOrigins) {
+            try {
+                const html = await fetchPolicyHtml({ href: homepage });
+                candidates = getPolicyCandidates({ candidates: findPolicyLinks(html, homepage) });
+                if (candidates.length) break;
+            } catch {
+                // Some sites redirect between www and the bare domain. Since
+                // redirects are intentionally refused, try that host directly.
+            }
+        }
+    }
+    if (!candidates.length) return;
+
     const analyzeButton = $("btn-analyze-policies");
     analyzeButton.disabled = true;
     analyzeButton.textContent = "Finding policies…";

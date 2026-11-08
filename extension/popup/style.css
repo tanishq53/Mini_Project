@@ -758,6 +758,58 @@ ul {
   overflow-wrap: anywhere;
   user-select: none;
 }
+.policy-report-title {
+  min-width: 0;
+}
+.policy-report-help {
+  align-items: center;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: help;
+  display: inline-flex;
+  flex: 0 0 17px;
+  font-size: 11px;
+  font-weight: 700;
+  height: 17px;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  position: relative;
+  user-select: none;
+  width: 17px;
+}
+.policy-report-help:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.policy-report-tooltip {
+  background: var(--ink);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  top: calc(100% + 8px);
+  color: var(--paper);
+  display: none;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  line-height: 1.45;
+  padding: var(--sp-2) var(--sp-3);
+  position: absolute;
+  right: -10px;
+  user-select: text;
+  white-space: normal;
+  width: min(240px, 65vw);
+  z-index: 5;
+}
+.policy-report-help.tooltip-above .policy-report-tooltip {
+  bottom: calc(100% + 8px);
+  top: auto;
+}
+.policy-report-help:hover .policy-report-tooltip,
+.policy-report-help:focus .policy-report-tooltip,
+.policy-report-help:focus-within .policy-report-tooltip {
+  display: block;
+}
 .policy-report-summary::-webkit-details-marker {
   display: none;
 }
