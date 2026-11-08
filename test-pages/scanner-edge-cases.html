@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scanner edge cases</title>
+</head>
+<body>
+  <h1>Scanner edge cases</h1>
+  <p>Initial expected fields: governmentId 1, name 1, phone 1, dob 1. The company name is not personal.</p>
+  <form onsubmit="return false">
+    <label>Company name <input type="text" name="company_name"></label>
+    <label>First name <input type="text" name="first_name"></label>
+    <label>Passport number <input type="text" name="passport"></label>
+  </form>
+  <label>Contact number <input type="text" name="contact_number"></label>
+  <input type="text" autocomplete="bday" aria-label="Birth date">
+  <button id="late-field">Add a late email field</button>
+  <div id="late-fields"></div>
+  <script>
+    document.getElementById("late-field").addEventListener("click", () => {
+      const input = document.createElement("input");
+      input.type = "email";
+      input.name = "contact_email";
+      document.getElementById("late-fields").replaceChildren(input);
+    });
+  </script>
+</body>
+</html>

@@ -4,10 +4,8 @@
   "version": "0.2.0",
   "description": "Estimate website privacy exposure from forms, cookies, trackers and HTTPS.",
   "permissions": [
-    "activeTab",
     "scripting",
     "storage",
-    "tabs",
     "cookies",
     "sidePanel",
     "webNavigation"

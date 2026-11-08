@@ -1,5 +1,6 @@
 """Firebase-authenticated dashboard and per-user Firestore history APIs."""
 import logging
+import os
 from typing import Literal
 
 from fastapi import APIRouter, Body, Header, HTTPException
@@ -117,6 +118,8 @@ def authenticate_extension(authorization: str | None) -> dict | None:
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Invalid extension authorization.")
     try:
+        if token == os.getenv("PRIVACYGUARD_API_KEY", ""):
+            return None
         if token.startswith("pg_"):
             user = firebase_store.get_api_user(token)
             if not user:

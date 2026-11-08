@@ -3,6 +3,18 @@ const FIELD_KEYS = ["name", "email", "phone", "address", "dob", "password", "fin
 const zeroFields = () => Object.fromEntries(FIELD_KEYS.map((key) => [key, 0]));
 const trackerCounts = (overrides = {}) => ({ analytics: 0, advertising: 0, social: 0, unknown: 0, ...overrides });
 
+const MOCK_TRACKER_DOMAINS = {
+  analytics: ["google-analytics.com", "googletagmanager.com", "segment.com", "hotjar.com", "mixpanel.com"],
+  advertising: ["doubleclick.net", "googlesyndication.com", "adnxs.com", "adsrvr.org", "facebook.net"],
+  social: ["connect.facebook.net", "platform.twitter.com", "platform.linkedin.com", "platform.instagram.com"],
+  unknown: ["cdn-telemetry.net", "collector-edge.io", "stats-pixel.org", "beacon-tracker.com"]
+};
+
+const MOCK_COOKIE_NAMES = {
+  firstParty: ["_session_id", "csrf_token", "_ga", "_gid", "preferences", "user_jwt", "remember_me", "site_theme", "cart_id"],
+  thirdParty: ["IDE", "test_cookie", "tuuid", "uid", "visitor_id", "anj", "bscookie", "li_sugr", "ad_track_id"]
+};
+
 export function levelFromScore(score) {
   if (score <= 25) return "Low";
   if (score <= 50) return "Moderate";
@@ -19,7 +31,28 @@ function makeReport({ hostname, path = "/", https = true, forms = 0, fields = {}
     scannedAt: "2026-10-21T10:00:00Z",
     https,
     scanner: { forms, personalDataFields: Object.values(fieldTypes).reduce((a, b) => a + b, 0), fieldTypes, fields: [] },
-    tracking: { cookies: { total: first + third, firstParty: first, thirdParty: third }, thirdPartyScripts: scripts, trackers: trackerCounts(trackers) },
+    tracking: {
+      cookies: {
+        total: first + third, firstParty: first, thirdParty: third,
+        firstPartyList: Array.from({ length: first }, (_, i) => ({
+          name: MOCK_COOKIE_NAMES.firstParty[i % MOCK_COOKIE_NAMES.firstParty.length] + (i >= MOCK_COOKIE_NAMES.firstParty.length ? `_${i + 1}` : ""),
+          domain: hostname
+        })),
+        thirdPartyList: Array.from({ length: third }, (_, i) => ({
+          name: MOCK_COOKIE_NAMES.thirdParty[i % MOCK_COOKIE_NAMES.thirdParty.length] + (i >= MOCK_COOKIE_NAMES.thirdParty.length ? `_${i + 1}` : ""),
+          domain: MOCK_TRACKER_DOMAINS.advertising[i % MOCK_TRACKER_DOMAINS.advertising.length] || `tracker${i + 1}.example.com`
+        }))
+      },
+      thirdPartyScripts: scripts,
+      trackers: trackerCounts(trackers),
+      trackerList: Object.entries(trackerCounts(trackers)).flatMap(([cat, count]) => {
+        const pool = MOCK_TRACKER_DOMAINS[cat] || [];
+        return Array.from({ length: count }, (_, i) => ({
+          domain: pool[i % pool.length] || `${cat}${i + 1}.example.net`,
+          category: cat
+        }));
+      })
+    },
     policy: { found: false, url: null, candidates: [] }
   };
   return {

@@ -27,13 +27,14 @@
         "aadhaar", "aadhar", "(?<![a-z])pan(?![a-z])", "passport", "ssn",
         "social.?security", "national.?id", "(?<![a-z])nid(?![a-z])",
         "driving.?licen", "driver.?licen", "dl.?num",
-        "tax.?id", "taxpayer", "voter.?id", "ration"
+        "tax.?id", "taxpayer", "voter.?id", "(?<![a-z])ration(?![a-z])"
       ]
     },
     {
       category: "financial",
       keywords: [
-        "card", "credit", "debit", "cvv", "cvc", "csc",
+        // '(?<![a-z])card(?![a-z])' avoids false positives on 'discard', 'scorecard'.
+        "(?<![a-z])card(?![a-z])", "credit", "debit", "cvv", "cvc", "csc",
         "expir", "ccnum", "cardnum", "card.?number",
         "account.?num", "bank.?account", "routing", "ifsc", "upi"
       ]
@@ -54,23 +55,31 @@
     },
     {
       category: "dob",
+      // '(?<![a-z])born(?![a-z])' avoids false positives on 'airborne', 'newborn'.
       keywords: [
         "dob", "date.?of.?birth", "birth.?date", "birthday",
-        "birth.?day", "bday", "born"
+        "birth.?day", "bday", "(?<![a-z])born(?![a-z])"
       ]
     },
     {
       category: "address",
+      // Bare 'state' matched 'statement'; 'city' matched 'electricity'/'publicity';
+      // 'zip' matched 'unzip'. All three now use word-boundary lookbehind+lookahead.
       keywords: [
-        "address", "addr", "street", "city", "state",
-        "country", "zip", "postal", "pincode", "pin.?code",
+        "address", "addr", "street", "(?<![a-z])city(?![a-z])", "(?<![a-z])state(?![a-z])",
+        "country", "(?<![a-z])zip(?![a-z])", "postal", "pincode", "pin.?code",
         "landmark", "locality", "district", "region"
       ]
     },
     {
       category: "name",
+      // '(?<![a-z_])name(?![a-z])' matches standalone 'name' / 'Name' / 'Enter your name'
+      // but NOT '_name' suffixes such as company_name, product_name, domain_name, hotel_name.
+      // All compound personal-name forms (first_name, last_name, …) are caught by their
+      // own explicit keywords below, so the bare 'name' entry only needs to cover the
+      // case where the attribute or label is literally "name" / "Name".
       keywords: [
-        "name", "fullname", "full.?name",
+        "(?<![a-z_])name(?![a-z])", "fullname", "full.?name",
         "firstname", "first.?name", "fname",
         "lastname", "last.?name", "lname",
         "middlename", "middle.?name",

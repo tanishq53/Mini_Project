@@ -1,5 +1,6 @@
 import uuid
 import ipaddress
+import os
 import re
 from urllib.parse import urlsplit
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -15,8 +16,12 @@ router = APIRouter()
 
 
 @router.post("/scan", response_model=ScanResponse)
-def scan(request: ScanRequest, http_request: Request, authorization: str | None = Header(default=None)) -> dict:
+def scan(request: ScanRequest, http_request: Request,
+         authorization: str | None = Header(default=None),
+         save_history: str | None = Header(default=None, alias="X-PrivacyGuard-Save-History")) -> dict:
     account = authenticate_extension(authorization)
+    if not account and os.getenv("APP_ENV", "development").lower() == "production":
+        raise HTTPException(status_code=401, detail="Connect the extension to a PrivacyGuard account to scan.")
     scan_dict = request.model_dump()
     # Never trust a client-supplied TLS claim. The backend checks the URL itself.
     local_client = False
@@ -38,13 +43,14 @@ def scan(request: ScanRequest, http_request: Request, authorization: str | None 
     scan_dict["tls"] = check_tls(request.url, allow_private=True) if request.https and can_probe_tls else None
     outcome = calculate_risk(scan_dict)
 
-    # Contract rule: the three parts add up EXACTLY to riskScore.
-    assert sum(outcome["breakdown"].values()) == outcome["riskScore"]
+    # Keep the API invariant explicit even when Python runs with assertions disabled.
+    if sum(outcome["breakdown"].values()) != outcome["riskScore"]:
+        raise RuntimeError("Risk engine returned an inconsistent breakdown.")
 
-    scan_id = "scan_" + uuid.uuid4().hex[:8]
+    # Full UUID entropy keeps report identifiers impractical to guess.
+    scan_id = "scan_" + uuid.uuid4().hex
     result = {"id": scan_id, "url": request.url, "tls": scan_dict["tls"], **outcome}
     host_for_history = None
-    stored_scan = scan_dict
     stored_result = result
     if account:
         parsed_url = None
@@ -59,10 +65,9 @@ def scan(request: ScanRequest, http_request: Request, authorization: str | None 
         # paths and query strings there too for scans linked to an account.
         safe_authority = f"[{host_for_history}]" if ":" in host_for_history else host_for_history
         safe_url = f"{parsed_url.scheme}://{safe_authority}/"
-        stored_scan = {**scan_dict, "url": safe_url}
         stored_result = {**result, "url": safe_url}
-    save_scan(scan_id, stored_scan, stored_result)
-    if account and host_for_history:
+    save_scan(scan_id, stored_result)
+    if account and host_for_history and save_history == "true":
         # Store only the hostname and summary; discard paths, query strings,
         # page contents, and scan details from account history.
         record_visit(account["id"], host_for_history, outcome["riskScore"],

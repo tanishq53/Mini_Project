@@ -121,7 +121,7 @@ Sent as `SCAN_RESULT` with `source: "tracker"`. The payload contains both object
 ```json
 {
   "tracking": {
-    "thirdPartyScripts": 6,
+    "thirdPartyScripts": 7,
     "trackers": {
       "analytics": 3,
       "advertising": 2,
@@ -146,7 +146,7 @@ Sent as `SCAN_RESULT` with `source: "tracker"`. The payload contains both object
 | Field | Type | Notes |
 |---|---|---|
 | `trackers.*` | integer | Known services only go in analytics, advertising or social. Unrecognised third-party scripts go in `unknown`. |
-| `trackerList` | array | Optional, used for the details view |
+| `trackerList` | array | Optional, used for the details view. When present, it must match `thirdPartyScripts` and each category count. |
 | `policy.found` | boolean | True if at least one confident privacy policy link exists |
 | `policy.url` | string or null | Best match. `null` if not found. |
 | `policy.candidates` | array | All privacy-related links. Used for the "possible links" fallback when `found` is false. |
@@ -166,7 +166,7 @@ Built by `background.js`. Sent as the body of `POST /scan`.
   "scanner": { },
   "tracking": {
     "cookies": { "total": 14, "firstParty": 9, "thirdParty": 5 },
-    "thirdPartyScripts": 6,
+    "thirdPartyScripts": 7,
     "trackers": { "analytics": 3, "advertising": 2, "social": 1, "unknown": 1 }
   },
   "policy": { }
@@ -174,6 +174,7 @@ Built by `background.js`. Sent as the body of `POST /scan`.
 ```
 
 `scanner` and `policy` are copied unchanged from sections 4.1 and 4.2. `tracking.cookies` is added by background using `chrome.cookies`.
+`thirdPartyScripts` counts unique script hostnames and equals the sum of the four tracker categories.
 
 `https` reports the URL scheme only. The backend adds a `tls` result (`secure`, `insecure`, `broken`, or `null`) to the `/scan` response after a certificate-validating TLS handshake on port 443. The handshake sends the hostname for SNI but no HTTP request, path, cookies, or form data. `secure` means the backend's trust store accepted the certificate and hostname; it does not report Chrome's address-bar state or detect mixed content. `insecure` means certificate verification failed, `broken` means TLS negotiation failed, and `null` means the backend could not make a reliable check. The backend checks only local extension requests; it checks private/LAN destinations only when the URL contains an explicit IP address, preventing DNS rebinding through a public hostname. Do not expose the development server through a network proxy. An `insecure` or `broken` TLS state contributes to the security score like an HTTP connection.
 
@@ -343,8 +344,13 @@ All errors, from any module or the backend, use this shape:
 | `GEMINI_FAILED` | AI analysis failed or timed out |
 | `EXTENSION_AUTH_REQUIRED` | No valid Firebase connection key is saved in extension options |
 | `INVALID_INPUT` | Request did not match this contract |
+| `AUTH_REQUIRED` | A valid bearer token is required when API authentication is enabled |
+| `RATE_LIMITED` | The caller exceeded the configured API request limit |
+| `PAYLOAD_TOO_LARGE` | The scan request exceeded the configured byte limit |
+| `HTTPS_REQUIRED` | Production API was reached without HTTPS |
+| `SERVER_MISCONFIGURED` | API key or required production security configuration is missing |
 
-Backend errors should use HTTP status codes (400 for invalid input, 500 for server errors, 502 or 504 for Gemini failures) with the body above.
+Backend errors use the same body shape with HTTP 400 for invalid input, 401 for missing or invalid authentication, 403 for HTTPS enforcement, 413 for oversized requests, 429 for rate limits, 500 for server errors, 503 for missing security configuration, and 502 or 504 for future Gemini failures.
 
 ## 9. Rules for everyone
 
@@ -372,3 +378,4 @@ Backend errors should use HTTP status codes (400 for invalid input, 500 for serv
 | 1.3 | 2026-11-02 | Added backend TLS certificate verification to distinguish HTTPS URLs from verified TLS connections. |
 | 1.4 | 2026-11-03 | Added a local account dashboard, SQLite-backed domain-only visit history, extension account keys, and day/week/month history views. |
 | 1.5 | 2026-11-03 | Replaced dashboard account authentication and history storage with Firebase Authentication and Cloud Firestore. |
+| 1.6 | 2026-11-08 | Added strict request validation, API hardening, and production deployment requirements while retaining Firebase accounts and policy-analysis endpoints. |

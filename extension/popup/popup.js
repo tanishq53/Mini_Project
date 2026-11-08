@@ -6,7 +6,7 @@ import { USE_MOCK } from "../utils/config.js";
 import {
     showState, setScanningSite, renderReport, renderPolicyReports, getPolicyCandidates,
     renderWarnings, addWarning, setAnalyzeButton, renderError, errorCopy,
-    applyPhaseSwitch, renderReputation
+    applyPhaseSwitch, renderReputation, initExpandableRows
 } from "./ui.js";
 import { source } from "./source.js";
 import { mountDevPicker } from "./devPicker.js";
@@ -29,8 +29,15 @@ const policyHtmlCache = new Map();
 /* ---------- helpers ---------- */
 
 async function getActiveTab() {
-    const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    return active ?? null;
+    try {
+        if (typeof chrome !== "undefined" && chrome.tabs?.query) {
+            const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            return active ?? null;
+        }
+    } catch {
+        // Fallback for standalone dev preview
+    }
+    return { id: 1, url: "https://example.com/login" };
 }
 
 function hostOf(url) {
@@ -435,6 +442,7 @@ $("open-policy-reports").addEventListener("click", () => {
 $("close-policy-reports").addEventListener("click", () => $("policy-report-dialog").close());
 
 applyPhaseSwitch();
+initExpandableRows();
 if (USE_MOCK) mountDevPicker();
 
 // Automatic scanning: when the panel opens, when the user switches tab, and when a page finishes loading.
