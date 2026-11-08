@@ -1,6 +1,7 @@
 :root{color-scheme:light;--ground:#f3f4ef;--paper:#fff;--ink:#172320;--muted:#63706a;--line:#dce2dc;--green:#1f6249;--green-dark:#194c3a;--green-soft:#e7f0e9;--amber:#9c6400;--red:#a64036;--font-body:"Segoe UI",Arial,sans-serif;--font-display:Georgia,"Times New Roman",serif}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @keyframes view-enter{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
 .view-enter{animation:view-enter .34s cubic-bezier(.2,.7,.25,1) both}
 html{min-width:320px;background:var(--ground);scroll-behavior:smooth}

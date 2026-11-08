@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f3f4ef">
   <title>PrivacyGuard — Your browsing, understood</title>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem("privacyguard-theme")||"light"}catch{document.documentElement.dataset.theme="light"}</script>
-  <link rel="stylesheet" href="/web/app.css">
+  <link rel="stylesheet" href="/web/app.css?v=dashboard-polish-20261108">
 </head>
 <body>
   <header class="topbar">
@@ -75,7 +75,7 @@
       <section class="summary-strip" aria-label="Activity summary">
         <div><span class="summary-label">Scans</span><strong id="total-visits">0</strong><span class="summary-caption" id="period-caption">in the past 7 days</span></div>
         <div><span class="summary-label">Sites scanned</span><strong id="unique-sites">0</strong><span class="summary-caption">unique domains</span></div>
-        <div class="summary-action"><span class="summary-label">History collection</span><strong id="connection-state">Not connected</strong><button class="text-button" id="connect-open" type="button">Connect extension <span aria-hidden="true">→</span></button></div>
+        <div class="summary-action"><span class="summary-label">History collection</span><strong id="connection-state">Not connected</strong><span class="summary-caption" id="last-scan-status">No scans received yet.</span><button class="text-button" id="connect-open" type="button">Connect extension <span aria-hidden="true">→</span></button></div>
       </section>
 
       <details class="score-guide">
@@ -96,7 +96,7 @@
             <label>Filter sites <input id="site-filter" type="search" placeholder="Search a domain" autocomplete="off"></label>
             <label>Exposure <select id="exposure-filter"><option value="all">All levels</option><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option><option value="very-high">Very high</option></select></label>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>Website</th><th>Scans</th><th>Score range</th><th>Why it scored</th></tr></thead><tbody id="top-sites"></tbody></table></div>
+          <div class="table-wrap"><table><caption class="sr-only">Websites scanned in the selected history period</caption><thead><tr><th>Website</th><th>Scans</th><th>Score range</th><th>Why it scored</th></tr></thead><tbody id="top-sites"></tbody></table></div>
           <p class="empty-state" id="sites-empty" hidden>No scans in this period yet.</p>
         </section>
         <section class="history-section recent-section">
@@ -133,6 +133,6 @@
     </section>
   </main>
   <footer class="site-footer"><span>PrivacyGuard</span><span>Read-only scans. Your browsing data stays yours.</span></footer>
-  <script type="module" src="/web/app.js?v=dashboard-refinements-20261108"></script>
+  <script type="module" src="/web/app.js?v=dashboard-polish-20261108"></script>
 </body>
 </html>

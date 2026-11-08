@@ -107,6 +107,11 @@ function renderChart(byDay, period) {
   const values = period === "day"
     ? [byDay.reduce((total, item) => total + item.visits, 0)]
     : points.map((date) => counts.get(date.toISOString().slice(0, 10)) || 0);
+  const periodName = period === "day" ? "past 24 hours" : period === "week" ? "past 7 days" : "past 30 days";
+  const total = values.reduce((sum, value) => sum + value, 0);
+  container.setAttribute("aria-label", period === "day"
+    ? `Scan activity for the past 24 hours: ${total} scans.`
+    : `Scan activity for the ${periodName}: ${total} scans over ${values.length} days.`);
   const max = Math.max(1, ...values);
   points.forEach((date, index) => {
     const column = document.createElement("div");
@@ -143,7 +148,11 @@ function renderSites(sites) {
     .filter((site) => exposureFilter === "all" || exposureForScore(site.maxScore).toLowerCase() === exposureFilter.replace("-", " "))
     .sort((a, b) => b.visits - a.visits || a.hostname.localeCompare(b.hostname));
   $("#sites-empty").hidden = visible.length > 0;
-  $("#sites-empty").textContent = allSites.length ? "No sites match these filters." : "No scans in this period yet.";
+  $("#sites-empty").textContent = allSites.length
+    ? "No sites match these filters. Clear the search or choose All levels to see the full list."
+    : connected
+      ? "No scans were recorded in this period. Keep PrivacyGuard open while browsing to add scan summaries."
+      : "No scans were recorded in this period. Connect the extension, then keep it open while browsing.";
   visible.forEach((site) => {
     const row = document.createElement("tr");
     const host = document.createElement("td"); host.textContent = site.hostname;
@@ -197,6 +206,9 @@ function renderRecent(visits) {
   const list = $("#recent-visits");
   list.replaceChildren();
   $("#recent-empty").hidden = visits.length > 0;
+  $("#recent-empty").textContent = connected
+    ? "No scans were recorded in this period. Keep PrivacyGuard open while browsing to add scan summaries."
+    : "Connect the extension to add scan summaries here. It records scans only while the extension panel is open.";
   visits.slice(0, 8).forEach((visit) => {
     const item = document.createElement("li"); item.className = "recent-item";
     const host = document.createElement("span"); host.className = "recent-host"; host.textContent = visit.hostname;
@@ -254,9 +266,10 @@ function makeHistoryPdf(history, period) {
       text(`${history.totalVisits} scans`, margin, 142, 12, true);
       text(`${history.uniqueSites} unique sites`, margin + 150, 142, 12, true);
       text(`Period: ${period === "day" ? "today" : `past ${period === "week" ? "7" : "30"} days`}`, margin, 162, 9, false, "0.36 0.42 0.38");
-      text("SITE ACTIVITY", margin, 194, 9, true, "0.13 0.39 0.29");
-      rule(204);
-      y = 226;
+      text("Exposure bands: Low 0-25 | Moderate 26-50 | High 51-75 | Very high 76-100", margin, 180, 8, false, "0.36 0.42 0.38");
+      text("SITE ACTIVITY", margin, 210, 9, true, "0.13 0.39 0.29");
+      rule(220);
+      y = 242;
     } else {
       text("Site activity", margin, 139, 9, true, "0.13 0.39 0.29");
       rule(149);
@@ -285,7 +298,7 @@ function makeHistoryPdf(history, period) {
       text(`Last scanned: ${visitedAt}`, margin, y + 16, 9, false, "0.36 0.42 0.38");
       text(`Scans: ${site.visits ?? 1}   |   Privacy exposure score: ${min}-${max}/100 (${exposure})`, margin, y + 31, 9);
       const factors = site.breakdown
-        ? `Highest score factors: data ${site.breakdown.personalData ?? 0} · trackers ${site.breakdown.trackers ?? 0} · security ${site.breakdown.security ?? 0}`
+        ? `Highest score factors: data ${site.breakdown.personalData ?? 0} | trackers ${site.breakdown.trackers ?? 0} | security ${site.breakdown.security ?? 0}`
         : "Score factors: details unavailable for older scans";
       text(factors, margin, y + 46, 8, false, "0.36 0.42 0.38");
       text(`Connection check: ${tls}`, margin, y + 59, 9, false, "0.36 0.42 0.38");
@@ -376,8 +389,16 @@ async function loadHistory(period = currentPeriod, { quiet = false } = {}) {
   const daysShown = history.effectiveDays || { day: 1, week: 7, month: 30 }[period];
   $("#period-caption").textContent = period === "day" ? "today" : `in the past ${daysShown} days${daysShown < (period === "week" ? 7 : 30) ? " · retention limit" : ""}`;
   renderChart(history.byDay, period === "month" && daysShown < 30 ? "week" : period);
-  renderSites(history.allSites || history.topSites);
+  const sites = history.allSites || history.topSites || [];
+  renderSites(sites);
   renderRecent(history.visits);
+  const latestVisit = sites.reduce((latest, site) => {
+    const timestamp = site.visitedAt ? new Date(site.visitedAt) : null;
+    return timestamp && !Number.isNaN(timestamp.valueOf()) && (!latest || timestamp > latest) ? timestamp : latest;
+  }, null);
+  $("#last-scan-status").textContent = latestVisit
+    ? `Latest scan in this period: ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(latestVisit)}`
+    : "No scans received in this period yet.";
   $("#activity-chart").removeAttribute("aria-busy");
   if (!quiet) {
     ["#activity-chart", ".site-section .table-wrap", "#recent-visits"].forEach((selector) => {
@@ -570,7 +591,7 @@ $("#revoke-key").addEventListener("click", async () => {
   } catch (error) { showMessage(error.message); }
 });
 $("#clear-history").addEventListener("click", async () => {
-  if (!confirm("Permanently clear all saved visit history for this account?")) return;
+  if (!confirm("Permanently delete all scan history saved to this signed-in account? This cannot be undone. Your extension connection will remain active. Continue?")) return;
   try { await api("/api/history", { method: "DELETE" }); await loadHistory(); showMessage("Your visit history has been cleared."); }
   catch (error) { showMessage(error.message); }
 });
