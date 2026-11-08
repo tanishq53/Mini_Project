@@ -91,7 +91,8 @@ async function runScan(tabId) {
     tracking: {
       cookies: await countCookies(url.hostname, trackerData.tracking.trackerList || []),
       thirdPartyScripts: trackerData.tracking.thirdPartyScripts,
-      trackers: trackerData.tracking.trackers
+      trackers: trackerData.tracking.trackers,
+      trackerList: trackerData.tracking.trackerList || []
     },
     policy: trackerData.policy || ZERO_POLICY
   };
@@ -142,17 +143,30 @@ async function countCookies(hostname, trackerList) {
   const site = siteOf(hostname);
   const key = (c) => `${c.domain}|${c.name}|${c.path}`;
   try {
-    const first = new Set((await chrome.cookies.getAll({ domain: site })).map(key));
-    const third = new Set();
-    // Cookies are usually set on the parent domain (doubleclick.net), not the script's subdomain, so look up the site.
+    const firstRaw = await chrome.cookies.getAll({ domain: site });
+    const firstSeen = new Set();
+    const firstPartyList = [];
+    for (const c of firstRaw) {
+      const k = key(c);
+      if (!firstSeen.has(k)) { firstSeen.add(k); firstPartyList.push({ name: c.name, domain: c.domain }); }
+    }
+    const thirdSeen = new Set();
+    const thirdPartyList = [];
     const domains = new Set(trackerList.map((t) => siteOf(t.domain)).filter((s) => s !== site));
     for (const d of domains) {
-      for (const c of await chrome.cookies.getAll({ domain: d })) third.add(key(c));
+      for (const c of await chrome.cookies.getAll({ domain: d })) {
+        const k = key(c);
+        if (!thirdSeen.has(k)) { thirdSeen.add(k); thirdPartyList.push({ name: c.name, domain: c.domain }); }
+      }
     }
-    return { total: first.size + third.size, firstParty: first.size, thirdParty: third.size };
+    return {
+      total: firstPartyList.length + thirdPartyList.length,
+      firstParty: firstPartyList.length, thirdParty: thirdPartyList.length,
+      firstPartyList, thirdPartyList
+    };
   } catch (err) {
     console.warn("PrivacyGuard: cookie read failed", err);
-    return { total: 0, firstParty: 0, thirdParty: 0 };
+    return { total: 0, firstParty: 0, thirdParty: 0, firstPartyList: [], thirdPartyList: [] };
   }
 }
 

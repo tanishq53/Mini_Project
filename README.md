@@ -25,6 +25,7 @@ PrivacyGuard/
 ```
 
 The data formats shared between modules are defined in [docs/contract.md](docs/contract.md).
+Backend hardening and extension review guidance is in [docs/security-review-checklist.md](docs/security-review-checklist.md).
 
 ## Install the extension (from GitHub)
 
@@ -38,7 +39,7 @@ After changing code, click the refresh icon on the PrivacyGuard card in `chrome:
 
 ## Run the backend
 
-The backend setup is documented in [backend/README.md](backend/README.md). By default the extension expects the server at `http://localhost:8000` (change it in `extension/utils/config.js`).
+The backend setup is documented in [backend/README.md](backend/README.md). Generate a local bearer token, set it in the ignored backend `.env`, and enter it under PrivacyGuard's Extension options before scanning. The default backend URL is `http://localhost:8000`; remote URLs must use HTTPS.
 
 ## Team
 

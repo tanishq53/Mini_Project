@@ -494,3 +494,120 @@ ul {
   margin: 0;
   padding: var(--sp-2) 0 var(--sp-3);
 }
+
+/* ---------- 8. Expandable dropdown rows ---------- */
+.expandable-row {
+  border-bottom: 1px solid var(--hair);
+}
+
+.expandable-row:last-child {
+  border-bottom: 0;
+}
+
+.row-toggle {
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 0 !important;
+}
+
+.row-toggle:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border-radius: var(--radius);
+}
+
+.row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.expand-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform 200ms ease;
+  flex-shrink: 0;
+}
+
+.expandable-row.open .expand-arrow {
+  transform: rotate(180deg);
+}
+
+.expand-details {
+  display: none;
+  padding: 0 0 var(--sp-2) var(--sp-4);
+}
+
+.expandable-row.open .expand-details {
+  display: block;
+  animation: slideDown 200ms ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 600px; }
+}
+
+.detail-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  border-bottom: 1px dotted var(--hair);
+}
+
+.detail-item:last-child {
+  border-bottom: 0;
+}
+
+.detail-item .detail-bullet {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin-top: 5px;
+}
+
+.detail-item .detail-name {
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.detail-item .detail-domain {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-empty {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Hide arrow when count is zero (nothing to expand) */
+.row-toggle .row-value.zero ~ .expand-arrow {
+  visibility: hidden;
+}
+
+.row-toggle:has(.row-value.zero) {
+  cursor: default;
+}
+
+.row-toggle:has(.row-value.zero):hover {
+  background: transparent;
+}

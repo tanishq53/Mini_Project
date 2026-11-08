@@ -188,6 +188,62 @@ export function addWarning(text) {
     $("warnings").append(banner);
 }
 
+function renderDetailList(containerId, items, count, emptyText = "None detected") {
+    const box = $(containerId);
+    if (!box) return;
+    box.replaceChildren();
+
+    if (!items || !items.length) {
+        if (count && count > 0) {
+            box.append(el("div", "detail-empty", `${count} detected`));
+        } else {
+            box.append(el("div", "detail-empty", emptyText));
+        }
+        return;
+    }
+
+    for (const item of items) {
+        const row = el("div", "detail-item");
+        row.append(el("span", "detail-bullet"));
+        const name = typeof item === "string" ? item : (item.name || item.domain || "Unknown");
+        row.append(el("span", "detail-name", name));
+        if (typeof item === "object" && item.domain && item.name && item.domain !== item.name) {
+            row.append(el("span", "detail-domain", item.domain));
+        }
+        box.append(row);
+    }
+}
+
+export function initExpandableRows() {
+    document.querySelectorAll(".row-toggle").forEach((toggle) => {
+        if (toggle.dataset.listenerAttached) return;
+        toggle.dataset.listenerAttached = "true";
+        toggle.setAttribute("role", "button");
+        toggle.setAttribute("tabindex", "0");
+        toggle.setAttribute("aria-expanded", "false");
+
+        const handleToggle = () => {
+            const rowValue = toggle.querySelector(".row-value");
+            if (rowValue && (rowValue.classList.contains("zero") || rowValue.textContent === "0" || rowValue.textContent === "\u2014")) {
+                return;
+            }
+            const parent = toggle.closest(".expandable-row");
+            if (parent) {
+                const isOpen = parent.classList.toggle("open");
+                toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            }
+        };
+
+        toggle.addEventListener("click", handleToggle);
+        toggle.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleToggle();
+            }
+        });
+    });
+}
+
 // report = { scan, result, policyAnalysis, warnings }  (docs/contract.md section 7)
 export function renderReport(report) {
     const scan = report?.scan ?? {};
@@ -223,6 +279,32 @@ export function renderReport(report) {
     setNumber("v-cookies", cookies?.total);
     setNumber("v-cookies-first", cookies?.firstParty);
     setNumber("v-cookies-third", cookies?.thirdParty);
+
+    // Render tracker details
+    const trackerList = scan.tracking?.trackerList || [];
+    renderDetailList("details-analytics", trackerList.filter((t) => t.category === "analytics"), trackers?.analytics);
+    renderDetailList("details-advertising", trackerList.filter((t) => t.category === "advertising"), trackers?.advertising);
+    renderDetailList("details-social", trackerList.filter((t) => t.category === "social"), trackers?.social);
+    renderDetailList("details-unknown", trackerList.filter((t) => t.category === "unknown"), trackers?.unknown);
+
+    // Render cookie details
+    const firstCookies = cookies?.firstPartyList || [];
+    const thirdCookies = cookies?.thirdPartyList || [];
+    const allCookies = [...firstCookies, ...thirdCookies];
+    renderDetailList("details-cookies-all", allCookies, cookies?.total);
+    renderDetailList("details-cookies-first", firstCookies, cookies?.firstParty);
+    renderDetailList("details-cookies-third", thirdCookies, cookies?.thirdParty);
+
+    // Ensure rows whose count is zero or missing are collapsed
+    document.querySelectorAll(".expandable-row").forEach((row) => {
+        const val = row.querySelector(".row-value");
+        const toggle = row.querySelector(".row-toggle");
+        if (!val || val.classList.contains("zero") || val.textContent === "0" || val.textContent === "\u2014") {
+            row.classList.remove("open");
+            if (toggle) toggle.setAttribute("aria-expanded", "false");
+        }
+    });
+    initExpandableRows();
 
     // Connection
     const https = $("v-https");
@@ -310,6 +392,10 @@ export function errorCopy(code, fallbackMessage) {
             "Can't reach the PrivacyGuard server",
             "Start the backend on port 8000 and try again."
         ],
+        SERVER_MISCONFIGURED: [
+            "Backend is not configured",
+            "Set the API key in the backend environment and in PrivacyGuard settings."
+        ],
         POLICY_FETCH_FAILED: [
             "Couldn't read the privacy policy",
             "The policy page did not load. Open it in a tab and scan that page instead."
@@ -321,6 +407,22 @@ export function errorCopy(code, fallbackMessage) {
         INVALID_INPUT: [
             "Unexpected data",
             "A module returned data in the wrong format. Check it against docs/contract.md."
+        ],
+        AUTH_REQUIRED: [
+            "Backend authentication required",
+            "Add the backend bearer token in PrivacyGuard settings, or check with the backend administrator."
+        ],
+        RATE_LIMITED: [
+            "Too many scans",
+            "Wait a minute before scanning again."
+        ],
+        HTTPS_REQUIRED: [
+            "Secure connection required",
+            "The backend must be accessed over HTTPS outside local development."
+        ],
+        PAYLOAD_TOO_LARGE: [
+            "Page scan is too large",
+            "This page contains more scan metadata than the backend accepts."
         ]
     };
     const [title, message] = copy[code] ?? ["Something went wrong", fallbackMessage || "Try again."];

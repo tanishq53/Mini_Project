@@ -2,6 +2,17 @@
 (() => {
   let timer = null;
   let lastContent = "";
+  let stopped = false;
+  let observer = null;
+
+  const stopWatcher = () => {
+    stopped = true;
+    clearTimeout(timer);
+    observer?.disconnect();
+  };
+
+  const isInvalidated = (error) =>
+    /extension context invalidated/i.test(error?.message || String(error));
 
   const contentSignature = () => {
     const fields = [...document.querySelectorAll("input,select,textarea")]
@@ -11,15 +22,28 @@
   };
 
   const report = (reason) => {
+    if (stopped) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
+      timer = null;
+      if (stopped) return;
       lastContent = contentSignature();
-      chrome.runtime.sendMessage({ type: "PAGE_CHANGED", payload: { url: location.href, reason } }).catch(() => {});
+      try {
+        chrome.runtime.sendMessage({
+          type: "PAGE_CHANGED",
+          payload: { url: location.href, reason }
+        }).catch((error) => {
+          if (isInvalidated(error)) stopWatcher();
+        });
+      } catch (error) {
+        // Reloading the extension invalidates content scripts already injected in open tabs.
+        if (isInvalidated(error)) stopWatcher();
+      }
     }, 500);
   };
 
   lastContent = contentSignature();
-  const observer = new MutationObserver(() => {
+  observer = new MutationObserver(() => {
     const signature = contentSignature();
     if (signature !== lastContent) report("content");
   });

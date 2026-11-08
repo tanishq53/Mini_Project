@@ -7,13 +7,18 @@ function backendError(message) {
 }
 
 export async function postScan(scan) {
+  const saved = await chrome.storage.local.get(["privacyGuardBackendUrl", "privacyGuardApiToken"]);
+  const backendUrl = (saved.privacyGuardBackendUrl || BACKEND_URL).replace(/\/+$/, "");
+  const headers = { "Content-Type": "application/json" };
+  if (saved.privacyGuardApiToken) headers.Authorization = `Bearer ${saved.privacyGuardApiToken}`;
+
   // AbortController stops a hung request instead of leaving the panel loading forever.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
   try {
-    const res = await fetch(`${BACKEND_URL}/scan`, {
+    const res = await fetch(`${backendUrl}/scan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(scan),
       signal: controller.signal
     });
@@ -25,7 +30,7 @@ export async function postScan(scan) {
     return body;
   } catch (err) {
     if (err && err.error) throw err;
-    throw backendError("Could not reach the PrivacyGuard server. Is it running on " + BACKEND_URL + "?");
+    throw backendError("Could not reach the PrivacyGuard server. Is it running on " + backendUrl + "?");
   } finally {
     clearTimeout(timer);
   }

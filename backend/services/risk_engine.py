@@ -22,7 +22,8 @@ FIELD_WEIGHTS = {
     "phone": 3,
     "address": 4,
     "dob": 4,
-    "password": 2,
+    # Exposure weight only; this is never a password or credential value.
+    "password": 2,  # nosec B105
     "financial": 8,
     "governmentId": 10,
 }
