@@ -102,7 +102,18 @@ class RequestSecurityMiddleware:
                     (b"referrer-policy", b"no-referrer"),
                     (b"cache-control", b"no-store"),
                 ]
-                if not path.startswith(("/docs", "/redoc", "/openapi.json")):
+                if path == "/" or path.startswith("/web/"):
+                    # The dashboard needs its same-origin assets and Firebase's
+                    # browser SDK/API endpoints; keep the policy scoped to that UI.
+                    dashboard_csp = (
+                        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; "
+                        "script-src 'self' 'unsafe-inline' https://www.gstatic.com; "
+                        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                        "connect-src 'self' https://www.gstatic.com https://identitytoolkit.googleapis.com "
+                        "https://securetoken.googleapis.com"
+                    )
+                    security_headers.append((b"content-security-policy", dashboard_csp.encode("ascii")))
+                elif not path.startswith(("/docs", "/redoc", "/openapi.json")):
                     security_headers.append((b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
                 if production and scope.get("scheme") == "https":
                     security_headers.append((b"strict-transport-security", b"max-age=31536000"))
