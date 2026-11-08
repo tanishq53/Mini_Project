@@ -135,15 +135,62 @@ function renderChart(byDay, period) {
 function renderSites(sites) {
   const body = $("#top-sites");
   body.replaceChildren();
-  $("#sites-empty").hidden = sites.length > 0;
-  sites.forEach((site) => {
+  const query = $("#site-filter").value.trim().toLowerCase();
+  const exposureFilter = $("#exposure-filter").value;
+  const allSites = currentHistory?.allSites || sites;
+  const visible = [...allSites]
+    .filter((site) => !query || site.hostname.toLowerCase().includes(query))
+    .filter((site) => exposureFilter === "all" || exposureForScore(site.maxScore).toLowerCase() === exposureFilter.replace("-", " "))
+    .sort((a, b) => b.visits - a.visits || a.hostname.localeCompare(b.hostname));
+  $("#sites-empty").hidden = visible.length > 0;
+  $("#sites-empty").textContent = allSites.length ? "No sites match these filters." : "No scans in this period yet.";
+  visible.forEach((site) => {
     const row = document.createElement("tr");
     const host = document.createElement("td"); host.textContent = site.hostname;
     const visits = document.createElement("td"); visits.textContent = String(site.visits);
     const score = document.createElement("td"); score.textContent = `${site.minScore}–${site.maxScore}`;
     score.className = riskClass(site.maxScore >= 76 ? "very high" : site.maxScore >= 51 ? "high" : site.maxScore >= 26 ? "moderate" : "low");
-    row.append(host, visits, score); body.append(row);
+    const factors = document.createElement("td");
+    const breakdown = site.breakdown;
+    factors.textContent = breakdown
+      ? `Data ${breakdown.personalData ?? 0} · Trackers ${breakdown.trackers ?? 0} · Security ${breakdown.security ?? 0}`
+      : "Details unavailable";
+    factors.className = "score-factors";
+    row.append(host, visits, score, factors); body.append(row);
   });
+}
+
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+@\-\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function downloadHistoryCsv() {
+  if (!currentHistory) return;
+  const rows = [["Website", "Last scanned", "Scans", "Minimum score", "Maximum score", "Exposure", "Data points", "Tracker points", "Security points", "TLS status"]];
+  const sites = currentHistory.allSites || currentHistory.visits || [];
+  sites.forEach((site) => rows.push([
+    site.hostname,
+    site.visitedAt ? new Date(site.visitedAt).toISOString() : "",
+    site.visits ?? 1,
+    site.minScore ?? site.riskScore ?? "",
+    site.maxScore ?? site.riskScore ?? "",
+    exposureForScore(Number(site.maxScore ?? site.riskScore ?? 0)),
+    site.breakdown?.personalData ?? "",
+    site.breakdown?.trackers ?? "",
+    site.breakdown?.security ?? "",
+    site.tls || "Not checked"
+  ]));
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `privacyguard-${currentPeriod}-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function renderRecent(visits) {
@@ -237,9 +284,13 @@ function makeHistoryPdf(history, period) {
       text(site.hostname || "Unknown site", margin, y, 12, true);
       text(`Last scanned: ${visitedAt}`, margin, y + 16, 9, false, "0.36 0.42 0.38");
       text(`Scans: ${site.visits ?? 1}   |   Privacy exposure score: ${min}-${max}/100 (${exposure})`, margin, y + 31, 9);
-      text(`Connection check: ${tls}`, margin, y + 46, 9, false, "0.36 0.42 0.38");
-      rule(y + 58);
-      y += 76;
+      const factors = site.breakdown
+        ? `Highest score factors: data ${site.breakdown.personalData ?? 0} · trackers ${site.breakdown.trackers ?? 0} · security ${site.breakdown.security ?? 0}`
+        : "Score factors: details unavailable for older scans";
+      text(factors, margin, y + 46, 8, false, "0.36 0.42 0.38");
+      text(`Connection check: ${tls}`, margin, y + 59, 9, false, "0.36 0.42 0.38");
+      rule(y + 71);
+      y += 89;
     });
   }
   finishPage();
@@ -297,6 +348,7 @@ async function loadHistory(period = currentPeriod, { quiet = false } = {}) {
   if (!quiet) {
     currentHistory = null;
     $("#download-report").disabled = true;
+    $("#download-csv").disabled = true;
   }
   $("#activity-chart").setAttribute("aria-busy", "true");
   let history;
@@ -318,11 +370,13 @@ async function loadHistory(period = currentPeriod, { quiet = false } = {}) {
   const updated = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(lastHistoryUpdatedAt);
   $("#history-sync-status").textContent = `Updated ${updated} · checking every 5 seconds`;
   $("#download-report").disabled = false;
+  $("#download-csv").disabled = false;
   $("#total-visits").textContent = String(history.totalVisits);
   $("#unique-sites").textContent = String(history.uniqueSites);
-  $("#period-caption").textContent = `in the past ${{ day: "day", week: "7 days", month: "30 days" }[period]}`;
-  renderChart(history.byDay, period);
-  renderSites(history.topSites);
+  const daysShown = history.effectiveDays || { day: 1, week: 7, month: 30 }[period];
+  $("#period-caption").textContent = period === "day" ? "today" : `in the past ${daysShown} days${daysShown < (period === "week" ? 7 : 30) ? " · retention limit" : ""}`;
+  renderChart(history.byDay, period === "month" && daysShown < 30 ? "week" : period);
+  renderSites(history.allSites || history.topSites);
   renderRecent(history.visits);
   $("#activity-chart").removeAttribute("aria-busy");
   if (!quiet) {
@@ -336,6 +390,30 @@ async function loadHistory(period = currentPeriod, { quiet = false } = {}) {
 }
 
 $("#download-report").addEventListener("click", downloadHistoryPdf);
+$("#download-csv").addEventListener("click", downloadHistoryCsv);
+$("#site-filter").addEventListener("input", () => renderSites(currentHistory?.allSites || []));
+$("#exposure-filter").addEventListener("change", () => renderSites(currentHistory?.allSites || []));
+$("#history-retention").addEventListener("change", async (event) => {
+  const select = event.currentTarget;
+  const previous = select.value === "7" ? "30" : "7";
+  if (select.value === "7" && !confirm("Keeping 7 days will permanently delete older saved history. Continue?")) {
+    select.value = previous;
+    return;
+  }
+  select.disabled = true;
+  try {
+    await api("/api/history/retention", { method: "PUT", body: JSON.stringify({ days: Number(select.value) }) });
+    showMessage(`History retention set to ${select.value} days.`);
+  } catch (error) {
+    select.value = previous;
+    showMessage(error.message);
+    select.disabled = false;
+    return;
+  }
+  select.disabled = false;
+  try { await loadHistory(currentPeriod); }
+  catch (error) { showMessage(error.message); }
+});
 
 function refreshHistoryInBackground() {
   if (!auth?.currentUser || dashboardView.hidden || backgroundRefreshInFlight) return;
@@ -363,6 +441,10 @@ async function showDashboard(user) {
   animateView(dashboardView);
   $("#signed-in-nav").hidden = false;
   $("#account-email").textContent = user.email;
+  try {
+    const retention = await api("/api/history/retention");
+    $("#history-retention").value = String(retention.days);
+  } catch { /* History loading below surfaces account or backend errors. */ }
   try {
     connected = (await api("/api/extension-key")).connected;
     $("#connection-state").textContent = connected ? "Key active" : "Not connected";

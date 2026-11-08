@@ -729,6 +729,22 @@ ul {
 .policy-report-segment:last-child {
   border-bottom: 0;
 }
+.policy-report-overview {
+  border-bottom: 2px solid var(--ink);
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+.policy-report-overview h3 {
+  font-size: var(--fs-md);
+  margin: 0 0 var(--sp-2);
+}
+.policy-overview-points {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 20px;
+}
+.policy-overview-points li + li { margin-top: var(--sp-2); }
 .policy-report-summary {
   align-items: center;
   cursor: pointer;

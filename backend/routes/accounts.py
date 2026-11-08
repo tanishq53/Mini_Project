@@ -2,7 +2,7 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Body, Header, HTTPException
 
 from services import firebase_store
 
@@ -79,6 +79,24 @@ def history(period: Literal["day", "week", "month"] = "week",
     except Exception as exc:
         log.exception("Could not read Firebase visit history")
         raise HTTPException(status_code=503, detail="Could not load visit history from Firebase.") from exc
+
+
+@router.get("/history/retention")
+def history_retention(authorization: str | None = Header(default=None)):
+    user = current_user(authorization)
+    return {"days": firebase_store.get_history_retention(user["id"])}
+
+
+@router.put("/history/retention")
+def update_history_retention(days: Literal[7, 30] = Body(embed=True),
+                            authorization: str | None = Header(default=None)):
+    user = current_user(authorization)
+    try:
+        firebase_store.set_history_retention(user["id"], days)
+        return {"days": days}
+    except Exception as exc:
+        log.exception("Could not update Firebase history retention")
+        raise HTTPException(status_code=503, detail="Could not update history retention.") from exc
 
 
 @router.delete("/history")

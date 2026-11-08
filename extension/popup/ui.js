@@ -533,6 +533,19 @@ export function renderPolicyReports(segments) {
         ? `${reports.length} report${reports.length === 1 ? "" : "s"} · expand one to read it`
         : "Analyze this page or the linked policy pages to build a report.";
 
+    if (reports.length) {
+        const overview = el("section", "policy-report-overview");
+        overview.append(el("h3", "", "Quick overview"));
+        const points = el("ul", "policy-overview-points");
+        reports.forEach((segment) => {
+            const summary = segment.analysis.summary || segment.analysis.keyPoints?.[0];
+            if (summary) points.append(el("li", "", `${segment.title || segment.category}: ${summary}`));
+        });
+        if (!points.children.length) points.append(el("li", "", `${reports.length} page${reports.length === 1 ? "" : "s"} analyzed. Expand a section below for details.`));
+        overview.append(points);
+        list.append(overview);
+    }
+
     reports.forEach((segment, index) => {
         const section = el("details", "policy-report-segment");
         const heading = el("summary", "policy-report-summary", `${index + 1}. ${segment.title || segment.category || "Policy page"}`);

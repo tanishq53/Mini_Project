@@ -6,7 +6,7 @@ function backendError(message) {
   return { error: true, code: "BACKEND_UNREACHABLE", message };
 }
 
-export async function postScan(scan) {
+export async function postScan(scan, { saveHistory = false } = {}) {
   // AbortController stops a hung request instead of leaving the panel loading forever.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
@@ -14,7 +14,7 @@ export async function postScan(scan) {
     const stored = await chrome.storage.local.get("privacyGuard.apiToken");
     const token = stored["privacyGuard.apiToken"];
     const headers = { "Content-Type": "application/json" };
-    if (typeof token === "string" && token.startsWith("pg_")) {
+    if (saveHistory && typeof token === "string" && token.startsWith("pg_")) {
       headers.Authorization = `Bearer ${token}`;
     }
     const res = await fetch(`${BACKEND_URL}/scan`, {

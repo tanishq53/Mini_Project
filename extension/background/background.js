@@ -59,7 +59,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === "PAGE_CHANGED" && sender.tab?.id != null) {
     if (message.payload?.reason === "content") scheduleScan(sender.tab.id);
   } else if (message.type === "START_SCAN") {
-    runScan(message.payload && message.payload.tabId).then(sendResponse);
+    runScan(message.payload && message.payload.tabId, { saveHistory: true }).then(sendResponse);
     return true; // keep the channel open for the async reply
   } else if (message.type === "ANALYZE_POLICY") {
     analyzeCurrentPage(message.payload?.tabId)
@@ -132,7 +132,7 @@ function collect(tabId, { source, data }) {
   if (job.scanner && job.tracker) job.resolve();
 }
 
-async function runScan(tabId) {
+async function runScan(tabId, { saveHistory = false } = {}) {
   let tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -181,7 +181,7 @@ async function runScan(tabId) {
         thirdPartyScripts: scan.tracking.thirdPartyScripts,
         trackers: scan.tracking.trackers
       }
-    });
+    }, { saveHistory });
     // TLS status comes from the backend's certificate-verifying handshake,
     // not from the URL scheme or the page itself.
     scan.tls = result.tls ?? null;

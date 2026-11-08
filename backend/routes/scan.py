@@ -66,5 +66,5 @@ def scan(request: ScanRequest, http_request: Request, authorization: str | None 
         # Store only the hostname and summary; discard paths, query strings,
         # page contents, and scan details from account history.
         record_visit(account["id"], host_for_history, outcome["riskScore"],
-                     outcome["riskLevel"], scan_dict["tls"])
+                     outcome["riskLevel"], scan_dict["tls"], outcome["breakdown"])
     return result

@@ -115,6 +115,41 @@ def has_extension_key(user_id: str) -> bool:
     return bool(user_data.get("extensionKeyHash"))
 
 
+def get_history_retention(user_id: str) -> int:
+    data = _firestore().collection("users").document(user_id).get().to_dict() or {}
+    days = data.get("historyRetentionDays", 30)
+    return days if days in (7, 30) else 30
+
+
+def set_history_retention(user_id: str, days: int) -> None:
+    if days not in (7, 30):
+        raise ValueError("History retention must be 7 or 30 days.")
+    db = _firestore()
+    user_ref = db.collection("users").document(user_id)
+    user_ref.set({"historyRetentionDays": days}, merge=True)
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days - 1)).isoformat()
+    for snapshot in user_ref.collection("visits").stream():
+        data = snapshot.to_dict() or {}
+        daily = data.get("daily")
+        if not isinstance(daily, dict):
+            visited_at = data.get("visitedAt")
+            visited_day = visited_at.astimezone(timezone.utc).date().isoformat() if isinstance(visited_at, datetime) else str(visited_at or "")[:10]
+            if not visited_day or visited_day < cutoff:
+                snapshot.reference.delete()
+            continue
+        retained = {day: value for day, value in daily.items() if day >= cutoff}
+        if not retained:
+            snapshot.reference.delete()
+            continue
+        scores = [int(value.get("minScore", 0)) for value in retained.values()]
+        max_scores = [int(value.get("maxScore", 0)) for value in retained.values()]
+        snapshot.reference.update({
+            "daily": retained,
+            "minScore": min(scores),
+            "maxScore": max(max_scores),
+        })
+
+
 def get_api_user(token: str) -> dict[str, str] | None:
     db = _firestore()
     key = db.collection("extensionKeys").document(_digest(token)).get()
@@ -122,7 +157,8 @@ def get_api_user(token: str) -> dict[str, str] | None:
     return {"id": data["uid"]} if data and data.get("uid") else None
 
 
-def record_visit(user_id: str, hostname: str, risk_score: int, risk_level: str, tls: str | None) -> None:
+def record_visit(user_id: str, hostname: str, risk_score: int, risk_level: str, tls: str | None,
+                 breakdown: dict[str, int] | None = None) -> None:
     db = _firestore()
     from google.cloud import firestore
 
@@ -132,6 +168,7 @@ def record_visit(user_id: str, hostname: str, risk_score: int, risk_level: str, 
     site_id = hashlib.sha256(hostname.encode("utf-8")).hexdigest()
     ref = db.collection("users").document(user_id).collection("visits").document(site_id)
     transaction = db.transaction()
+    retention_days = get_history_retention(user_id)
 
     @firestore.transactional
     def update_site(transaction):
@@ -146,10 +183,13 @@ def record_visit(user_id: str, hostname: str, risk_score: int, risk_level: str, 
             "minScore": min(int(today_min), risk_score),
             "maxScore": max(int(today_max), risk_score),
         })
+        if breakdown and risk_score >= int(today_max):
+            today["maxScoreBreakdown"] = {key: int(value) for key, value in breakdown.items()
+                                          if key in {"personalData", "trackers", "security"}}
         daily[day] = today
         # Keep only the rolling month needed by the dashboard; global extrema
         # and the all-time scan count remain on the single site document.
-        cutoff = (now.date() - timedelta(days=30)).isoformat()
+        cutoff = (now.date() - timedelta(days=retention_days - 1)).isoformat()
         daily = {key: value for key, value in daily.items() if key >= cutoff}
         transaction.set(ref, {
             "hostname": hostname,
@@ -168,7 +208,9 @@ def record_visit(user_id: str, hostname: str, risk_score: int, risk_level: str, 
 
 def read_history(user_id: str, days: int) -> dict[str, Any]:
     db = _firestore()
-    start_day = (datetime.now(timezone.utc).date() - timedelta(days=days - 1)).isoformat()
+    retention_days = get_history_retention(user_id)
+    effective_days = min(days, retention_days)
+    start_day = (datetime.now(timezone.utc).date() - timedelta(days=effective_days - 1)).isoformat()
     totals_by_day: dict[str, int] = {}
     period_sites = []
     # Combine any pre-rollup per-scan documents with the new per-site document
@@ -219,6 +261,7 @@ def read_history(user_id: str, days: int) -> dict[str, Any]:
     for hostname, row in sites.items():
         daily = row["daily"]
         period_count = period_min = period_max = 0
+        period_breakdown = None
         for day, stats in daily.items():
             if day < start_day:
                 continue
@@ -233,6 +276,8 @@ def read_history(user_id: str, days: int) -> dict[str, Any]:
             else:
                 period_min = min(period_min, day_min)
                 period_max = max(period_max, day_max)
+            if day_max >= period_max and stats.get("maxScoreBreakdown"):
+                period_breakdown = stats["maxScoreBreakdown"]
             period_count += count
         if not period_count:
             continue
@@ -244,12 +289,15 @@ def read_history(user_id: str, days: int) -> dict[str, Any]:
             "maxScore": period_max,
             "riskLevel": row["riskLevel"],
             "tls": row["tls"],
+            "breakdown": period_breakdown,
         })
     period_sites.sort(key=lambda item: item.get("visitedAt") or "", reverse=True)
     top_sites = sorted(period_sites, key=lambda item: (-item["visits"], item["hostname"]))[:10]
     total_visits = sum(totals_by_day.values())
     return {"totalVisits": total_visits, "uniqueSites": len(period_sites), "visits": period_sites[:8],
             "allSites": period_sites,
+            "retentionDays": retention_days,
+            "effectiveDays": effective_days,
             "byDay": [{"date": day, "visits": count} for day, count in sorted(totals_by_day.items())],
             "topSites": top_sites}
 

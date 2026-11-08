@@ -55,7 +55,7 @@
         <div>
           <p class="overline">Your private activity log</p>
           <h1>Browsing history</h1>
-          <p class="lede">A record of sites PrivacyGuard scanned while your extension was connected.</p>
+          <p class="lede">A record of sites PrivacyGuard scanned while its panel was open and connected.</p>
         </div>
         <div class="period-controls">
           <div class="period-switch" role="group" aria-label="History period">
@@ -67,6 +67,7 @@
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3 13v3.5h14V13" /></svg>
             Download PDF
           </button>
+          <button class="quiet-button" id="download-csv" type="button" disabled>Download CSV</button>
           <p class="sync-status" id="history-sync-status" role="status">Loading history…</p>
         </div>
       </div>
@@ -77,6 +78,12 @@
         <div class="summary-action"><span class="summary-label">History collection</span><strong id="connection-state">Not connected</strong><button class="text-button" id="connect-open" type="button">Connect extension <span aria-hidden="true">→</span></button></div>
       </section>
 
+      <details class="score-guide">
+        <summary>How to read the privacy exposure score</summary>
+        <p>The score reflects detected personal-data fields, trackers and third-party cookies, and connection security. Lower scores mean fewer measured exposure signals; they do not guarantee a site is safe or trustworthy.</p>
+        <ul><li>0–25: Low</li><li>26–50: Moderate</li><li>51–75: High</li><li>76–100: Very high</li></ul>
+      </details>
+
       <section class="history-section">
         <div class="section-heading"><div><h2>Activity over time</h2><p class="muted" id="chart-description">Daily scan count</p></div></div>
         <div class="activity-chart" id="activity-chart" role="img" aria-label="Daily website scan activity"></div>
@@ -85,7 +92,11 @@
       <div class="lower-grid">
         <section class="history-section site-section">
           <div class="section-heading"><div><h2>Most scanned</h2><p class="muted">Domains with the most scans in this period</p></div></div>
-          <div class="table-wrap"><table><thead><tr><th>Website</th><th>Scans</th><th>Score range</th></tr></thead><tbody id="top-sites"></tbody></table></div>
+          <div class="history-filters">
+            <label>Filter sites <input id="site-filter" type="search" placeholder="Search a domain" autocomplete="off"></label>
+            <label>Exposure <select id="exposure-filter"><option value="all">All levels</option><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option><option value="very-high">Very high</option></select></label>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Website</th><th>Scans</th><th>Score range</th><th>Why it scored</th></tr></thead><tbody id="top-sites"></tbody></table></div>
           <p class="empty-state" id="sites-empty" hidden>No scans in this period yet.</p>
         </section>
         <section class="history-section recent-section">
@@ -112,12 +123,16 @@
 
       <section class="privacy-footer">
         <div><h2>Your data, under your control</h2><p>History is stored in Firebase Firestore: domains, scan times and risk summaries only. It excludes page paths and page contents. You can disconnect the extension or erase the records here.</p></div>
-        <button class="danger-button" id="clear-history" type="button">Clear my history</button>
+        <div class="privacy-actions">
+          <label for="history-retention">Keep history for</label>
+          <select id="history-retention"><option value="7">7 days</option><option value="30" selected>30 days</option></select>
+          <button class="danger-button" id="clear-history" type="button">Clear my history</button>
+        </div>
       </section>
       <p class="page-message" id="dashboard-message" role="status" hidden></p>
     </section>
   </main>
   <footer class="site-footer"><span>PrivacyGuard</span><span>Read-only scans. Your browsing data stays yours.</span></footer>
-  <script type="module" src="/web/app.js?v=history-live-20261108"></script>
+  <script type="module" src="/web/app.js?v=dashboard-refinements-20261108"></script>
 </body>
 </html>
