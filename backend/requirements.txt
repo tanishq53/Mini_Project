@@ -21,6 +21,6 @@ pymongo==4.19.0
 pytest==9.1.1
 python-dotenv==1.2.4
 starlette==1.8.0
-typing-inspection==0.4.4
+typing-inspection==0.4.5
 typing_extensions==4.16.0
 uvicorn==0.54.0
